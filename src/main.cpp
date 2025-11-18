@@ -2,6 +2,12 @@
 #include "SimpleFOCDrivers.h"
 #include "encoders/stm32hwencoder/STM32HWEncoder.h"
 
+#define BRAKE_RESISTOR PB4
+#define BTS_ENABLE PA11
+#define PH_B PA9 
+#define PH_C PA8
+#define PH_A PA10
+
 constexpr int pole_pairs = 15;
 float phase_resistance = 0.6;
 float phase_inductance = 0.0003;
