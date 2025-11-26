@@ -10,7 +10,7 @@
 #define PH_C PA8
 #define PH_A PA10
 #define BTS_OC PB12
-#define VDO_PIN PA3
+#define VDO_PIN PA0
 #define currentPHA PA2
 #define currentPHC PA1
 //Encoder setup parameters
@@ -18,7 +18,6 @@
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
 
-#define VDO PA0
 #define PWM_FREQ 16000 //16kHz
 //Motor setup parameters
 constexpr int pole_pairs = 15;
