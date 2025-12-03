@@ -14,7 +14,7 @@
 #define currentPHA PA2
 #define currentPHC PA1
 //Encoder setup parameters
-#define ENCODER_PPR 2700
+#define ENCODER_PPR 312
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
 
@@ -119,8 +119,8 @@ current_sense.gain_c *= -1;
     Serial.printf("Driver init failed!\n");
     return;
   }
-  MX_TIM3_Init();
-  MX_TIM2_Init();
+  //MX_TIM3_Init();
+  //MX_TIM2_Init();
 
   current_sense.linkDriver(&driver);
   current_sense.init();
@@ -185,15 +185,20 @@ void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
 
-  loop_time();
+  Serial.print(encoder.getAngle());
+  Serial.print("\t");
+  Serial.println(encoder.getVelocity());
+
+  //loop_time();
   motor.loopFOC();
   if (simplefoc_init_finish){
-   brake_control();
+   //brake_control();
   }
   if ((current_time - t_pwm ) >= 1){
     t_pwm  = current_time;
-  calc_hw_pwm();
-  motor.move(target_current);
+  //calc_hw_pwm();
+  motor.move();
+  //motor.move(target_current);
   }
   commander.run();
 }
