@@ -14,7 +14,7 @@
 #define currentPHA PA2
 #define currentPHC PA1
 //Encoder setup parameters
-#define ENCODER_PPR 305
+#define ENCODER_PPR 305  //3050
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
 #define RAD_2_DEG 57.2957795131f
@@ -184,10 +184,10 @@ current_sense.gain_c *= -1;
 void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
-  float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
-  Serial.print(degrees);
-  Serial.print("\t");
-  Serial.println(encoder.getVelocity());
+  //int degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+  //Serial.print(degrees);
+  //Serial.print("\t");
+  //Serial.println(encoder.getVelocity());
 
   //loop_time();
   motor.loopFOC();
