@@ -184,10 +184,10 @@ current_sense.gain_c *= -1;
 void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
-  //int degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
-  //Serial.print(degrees);
-  //Serial.print("\t");
-  //Serial.println(encoder.getVelocity());
+int degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+  Serial.print(degrees);
+  Serial.print("\t");
+  Serial.println(encoder.getVelocity());
 
   //loop_time();
   motor.loopFOC();
