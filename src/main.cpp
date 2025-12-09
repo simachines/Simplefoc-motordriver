@@ -62,7 +62,7 @@ uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
 uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
 // Motor and driver objects
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
-BLDCDriver3PWM driver = BLDCDriver3PWM(PH_A, PH_B, PH_C, BTS_OC);
+BLDCDriver3PWM driver = BLDCDriver3PWM(PH_A, PH_B, PH_C, BTS_ENABLE);
 LowsideCurrentSense current_sense = LowsideCurrentSense(66, currentPHA, _NC, currentPHC);
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
 
