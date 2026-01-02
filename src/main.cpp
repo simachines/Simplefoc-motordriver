@@ -14,10 +14,10 @@
 #define currentPHA PA2
 #define currentPHC PA1
 //Encoder setup parameters
-#define ENCODER_PPR 2700
+#define ENCODER_PPR 16384
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
-
+#define RAD_2_DEG 57.2957795131f
 #define PWM_FREQ 16000 //16kHz
 //Motor setup parameters
 constexpr int pole_pairs = 15;
@@ -62,8 +62,8 @@ uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
 uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
 // Motor and driver objects
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
-BLDCDriver3PWM driver = BLDCDriver3PWM(PH_A, PH_B, PH_C, BTS_OC);
-LowsideCurrentSense current_sense = LowsideCurrentSense(66, currentPHA, _NC, currentPHC);
+BLDCDriver3PWM driver = BLDCDriver3PWM(PH_A, PH_B, PH_C, BTS_ENABLE);
+LowsideCurrentSense current_sense = LowsideCurrentSense(66.0f, currentPHA, _NC, currentPHC);
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
 
 Commander commander = Commander(Serial);
@@ -114,13 +114,15 @@ current_sense.gain_c *= -1;
   driver.voltage_limit = driver.voltage_power_supply;
   driver.pwm_frequency = PWM_FREQ;
   driver.enable_active_high = false;
+
+  
   if (!driver.init()){
     simplefoc_init=false;
     Serial.printf("Driver init failed!\n");
     return;
   }
-  MX_TIM3_Init();
-  MX_TIM2_Init();
+  //MX_TIM3_Init();
+  //MX_TIM2_Init();
 
   current_sense.linkDriver(&driver);
   current_sense.init();
@@ -149,7 +151,7 @@ current_sense.gain_c *= -1;
   motor.phase_resistance = phase_resistance;
   motor.voltage_sensor_align = alignStrength;
   motor.monitor_downsample = 500;
-  motor.monitor_variables = _MON_CURR_Q | _MON_CURR_D | _MON_ANGLE | _MON_TARGET | _MON_VEL;
+  motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_VOLT_Q | _MON_VEL | _MON_ANGLE;
   motor.linkDriver(&driver); 
   motor.linkCurrentSense(&current_sense);
   motor.init();
@@ -184,16 +186,21 @@ current_sense.gain_c *= -1;
 void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
+  float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+  Serial.print(degrees);
+  Serial.print("\t");
+  Serial.println(encoder.getVelocity());
 
-  loop_time();
+  //loop_time();
   motor.loopFOC();
   if (simplefoc_init_finish){
-   brake_control();
+   //brake_control();
   }
   if ((current_time - t_pwm ) >= 1){
     t_pwm  = current_time;
-  calc_hw_pwm();
-  motor.move(target_current);
+  //calc_hw_pwm();
+  motor.move();
+  //motor.move(target_current);
   }
   commander.run();
 }
@@ -211,6 +218,7 @@ t_debug = current_time;
  Serial.println(brake_active);
   }
 }
+
 void brake_control(void){
        I_Bus = -current_sense.getDCCurrent(motor.electrical_angle) * 100 - MAX_REGEN_CURRENT; // Negate to flip polarity
     if (I_Bus > BRKRESACT_SENS){ // If over max regen current
@@ -221,6 +229,7 @@ void brake_control(void){
      TIM3->CCR1 = brake_active;
     }
  }
+
 static void MX_TIM3_Init(void){
   __HAL_RCC_TIM3_CLK_ENABLE();
                                
