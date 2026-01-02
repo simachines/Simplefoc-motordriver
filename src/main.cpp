@@ -102,7 +102,7 @@ void setup() {
   }
 
   // monitoring port
-  Serial1.begin1(115200);
+  Serial1.begin(115200);
   motor.useMonitoring(Serial);
 
   pinMode(LED_BUILTIN, OUTPUT);
