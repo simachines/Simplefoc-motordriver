@@ -10,9 +10,10 @@
 #define PH_C PA8
 #define PH_A PA10
 #define BTS_OC PB12
-#define VDO_PIN PA0
+#define VDO_PIN PA1
 #define currentPHA PA2
-#define currentPHC PA1
+#define currentPHC PA3
+
 //Encoder setup parameters
 #define ENCODER_PPR 16384
 #define ENCODER_PIN_A PB6
@@ -94,15 +95,15 @@ void setBandwidth(char* cmd) {
 }
 
 void setup() {
-  // Wait for PSU to turn on
+   //Wait for PSU to turn on
   pinMode(VDO_PIN, INPUT);
   while (digitalRead(VDO_PIN) == LOW) {
     Serial.println("PSU UNDETECTED");
-    delay(1000); // Small delay to avoid busy-waiting
+  delay(1000); // Small delay to avoid busy-waiting
   }
 
   // monitoring port
-  Serial.begin(9600);
+  Serial.begin(230400);
   motor.useMonitoring(Serial);
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -122,7 +123,7 @@ current_sense.gain_c *= -1;
     return;
   }
   //MX_TIM3_Init();
-  //MX_TIM2_Init();
+  MX_TIM2_Init();
 
   current_sense.linkDriver(&driver);
   current_sense.init();
@@ -187,18 +188,18 @@ void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
   float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
-  Serial.print(degrees);
-  Serial.print("\t");
-  Serial.println(encoder.getVelocity());
+  //Serial.print(degrees);
+  //Serial.print("\t");
+  //Serial.println(encoder.getVelocity());
 
-  //loop_time();
+  loop_time();
   motor.loopFOC();
   if (simplefoc_init_finish){
    //brake_control();
   }
   if ((current_time - t_pwm ) >= 1){
     t_pwm  = current_time;
-  //calc_hw_pwm();
+  calc_hw_pwm();
   motor.move();
   //motor.move(target_current);
   }
@@ -305,10 +306,10 @@ static void MX_TIM2_Init(void){
   __HAL_RCC_GPIOA_CLK_ENABLE();
  __HAL_RCC_TIM2_CLK_ENABLE();
 
- GPIO_InitStruct.Pin = GPIO_PIN_5;
+ GPIO_InitStruct.Pin = GPIO_PIN_0;
  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;  
  GPIO_InitStruct.Pull = GPIO_PULLDOWN;       
- GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;  
+ GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;  
  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;       
  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -316,7 +317,7 @@ static void MX_TIM2_Init(void){
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 65535;
+  htim2.Init.Period = 0xFFFFFFFF;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -344,7 +345,7 @@ static void MX_TIM2_Init(void){
   sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;   //filter
+  sConfigIC.ICFilter = 8;   // small digital filter to reject glitches
   if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
@@ -368,13 +369,15 @@ static void MX_TIM2_Init(void){
  }
 void calc_hw_pwm(void){
   /* Read capture registers directly from TIM3 handle (no IRQ required) */
-  period_ticks = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-  duty_ticks = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+ 
+  duty_ticks = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);   // CH2 captures high time (falling edge)
+  period_ticks = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1); // CH1 captures period (rising edge)
   //hw_pwm_ready = 0;
-  if (period_ticks > 0u) {
+  if (period_ticks == 0u) {
       if (duty_ticks > period_ticks) {
         duty_ticks = period_ticks;
       }
+      
        dutyPercent = (float)duty_ticks/period_ticks;
        target_current = (dutyPercent - 0.5f) * 2.0f * maxCurrent;
         //duty_scaled = (duty_ticks * 32000u) / period_ticks;
