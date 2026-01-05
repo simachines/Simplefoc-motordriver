@@ -1,6 +1,9 @@
 #include "SimpleFOC.h"
 #include "SimpleFOCDrivers.h"
 #include "encoders/stm32hwencoder/STM32HWEncoder.h"
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+#include "drivers/hardware_specific/stm32/stm32_mcu.h"
+#endif
 
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
@@ -10,6 +13,10 @@
 #define PH_C PA8
 #define PH_A PA10
 #define BTS_OC PB12
+#define BTS_OC_GPIO_PORT GPIOB
+#define BTS_OC_GPIO_PIN GPIO_PIN_12
+#define BTS_OC_AF GPIO_AF1_TIM1
+#define BTS_OC_ACTIVE_LOW false
 #define VDO_PIN PA1
 #define currentPHA PA2
 #define currentPHC PA3
@@ -35,6 +42,12 @@ uint16_t pwmPeriodCounts = 0;
 
 static void MX_TIM3_Init(void);
 static void MX_TIM2_Init(void);
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+static TIM_HandleTypeDef* simplefoc_getBreakTimer(void);
+static void enableGpioPortClock(GPIO_TypeDef* port);
+#endif
+static void configureBtsBreak(void);
+static void configureUnusedPins(void);
  void calc_hw_pwm(void);
  void loop_time(void);
  void brake_control(void);
@@ -96,18 +109,20 @@ void setBandwidth(char* cmd) {
 
 void setup() {
    //Wait for PSU to turn on
+  Serial.begin(9600);
+  pinMode(PC13, OUTPUT);
   pinMode(VDO_PIN, INPUT);
   while (digitalRead(VDO_PIN) == LOW) {
+    digitalWrite(PC13, HIGH);
     Serial.println("PSU UNDETECTED");
   delay(1000); // Small delay to avoid busy-waiting
+  digitalWrite(PC13, LOW);
   }
-
+  Serial.println("PSU DETECTED");
   // monitoring port
-  Serial.begin(9600);
-  motor.useMonitoring(Serial);
+  //motor.useMonitoring(Serial);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  
 current_sense.gain_a *= -1;
 current_sense.gain_c *= -1;
  
@@ -122,6 +137,8 @@ current_sense.gain_c *= -1;
     Serial.printf("Driver init failed!\n");
     return;
   }
+  //configureBtsBreak();
+  configureUnusedPins();
   //MX_TIM3_Init();
   MX_TIM2_Init();
 
@@ -256,7 +273,7 @@ static void MX_TIM3_Init(void){
   /* USER CODE BEGIN TIM3_Init 1 */
     GPIO_InitStruct.Pin = GPIO_PIN_4;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -385,3 +402,119 @@ void calc_hw_pwm(void){
        
     }
   }
+
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+static TIM_HandleTypeDef* simplefoc_getBreakTimer(void){
+  if (!driver.params) {
+    return nullptr;
+  }
+  auto params = static_cast<STM32DriverParams*>(driver.params);
+  for (int i = 0; i < 6; i++) {
+    TIM_HandleTypeDef* handle = params->timers_handle[i];
+    if (handle && IS_TIM_BREAK_INSTANCE(handle->Instance)) {
+      return handle;
+    }
+  }
+  return nullptr;
+}
+
+static void enableGpioPortClock(GPIO_TypeDef* port){
+  if (port == GPIOA) {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+  } else if (port == GPIOB) {
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+  } else if (port == GPIOC) {
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+  } else if (port == GPIOD) {
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+  } else if (port == GPIOE) {
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+  }
+#if defined(GPIOF)
+  else if (port == GPIOF) {
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+  }
+#endif
+#if defined(GPIOG)
+  else if (port == GPIOG) {
+    __HAL_RCC_GPIOG_CLK_ENABLE();
+  }
+#endif
+#if defined(GPIOH)
+  else if (port == GPIOH) {
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+  }
+#endif
+#if defined(GPIOI)
+  else if (port == GPIOI) {
+    __HAL_RCC_GPIOI_CLK_ENABLE();
+  }
+#endif
+}
+#endif
+
+static void configureBtsBreak(void){
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+  TIM_HandleTypeDef* breakTimer = simplefoc_getBreakTimer();
+  if (!breakTimer) {
+    return;
+  }
+
+  enableGpioPortClock(BTS_OC_GPIO_PORT);
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitStruct.Pin = BTS_OC_GPIO_PIN;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = BTS_OC_ACTIVE_LOW ? GPIO_PULLUP : GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.Alternate = BTS_OC_AF;
+  HAL_GPIO_Init(BTS_OC_GPIO_PORT, &GPIO_InitStruct);
+
+  uint32_t bdtr = breakTimer->Instance->BDTR;
+  bdtr |= TIM_BDTR_BKE;
+  if (BTS_OC_ACTIVE_LOW) {
+    bdtr |= TIM_BDTR_BKP;
+  } else {
+    bdtr &= ~TIM_BDTR_BKP;
+  }
+  breakTimer->Instance->BDTR = bdtr;
+#endif
+}
+
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+struct IdlePin {
+  GPIO_TypeDef* port;
+  uint16_t pin;
+};
+
+static void configureUnusedPins(void){
+  constexpr IdlePin pins[] = {
+    {GPIOB, GPIO_PIN_10},
+    {GPIOB, GPIO_PIN_2},
+    {GPIOB, GPIO_PIN_1},
+    {GPIOB, GPIO_PIN_0},
+    {GPIOC, GPIO_PIN_15},
+    {GPIOC, GPIO_PIN_14},
+    {GPIOB, GPIO_PIN_13},
+    {GPIOB, GPIO_PIN_14},
+    {GPIOB, GPIO_PIN_15},
+    {GPIOA, GPIO_PIN_12},
+    {GPIOA, GPIO_PIN_15},
+    {GPIOB, GPIO_PIN_3},
+    {GPIOB, GPIO_PIN_5},
+    {GPIOB, GPIO_PIN_8},
+    {GPIOB, GPIO_PIN_9},
+  };
+  GPIO_InitTypeDef gpio = {0};
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Speed = GPIO_SPEED_FREQ_LOW;
+  for (const IdlePin& pin : pins) {
+    enableGpioPortClock(pin.port);
+    gpio.Pin = pin.pin;
+    HAL_GPIO_Init(pin.port, &gpio);
+    HAL_GPIO_WritePin(pin.port, pin.pin, GPIO_PIN_RESET);
+  }
+}
+#else
+static void configureUnusedPins(void){}
+#endif
