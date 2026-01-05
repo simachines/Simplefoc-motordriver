@@ -138,7 +138,7 @@ current_sense.gain_c *= -1;
     return;
   }
   //configureBtsBreak();
-  configureUnusedPins();
+  //configureUnusedPins();
   //MX_TIM3_Init();
   MX_TIM2_Init();
 
