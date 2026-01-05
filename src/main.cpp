@@ -17,6 +17,7 @@
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
 #define BTS_OC_AF GPIO_AF1_TIM1
 #define BTS_OC_ACTIVE_LOW false
+#define FAULT_LED_PIN PC13
 #define VDO_PIN PA1
 #define currentPHA PA2
 #define currentPHC PA3
@@ -48,6 +49,9 @@ static void enableGpioPortClock(GPIO_TypeDef* port);
 #endif
 static void configureBtsBreak(void);
 static void configureUnusedPins(void);
+static void handleFaultLed(void);
+static bool isBreakActive(void);
+static void blinkFaultLed(void);
  void calc_hw_pwm(void);
  void loop_time(void);
  void brake_control(void);
@@ -110,14 +114,16 @@ void setBandwidth(char* cmd) {
 void setup() {
    //Wait for PSU to turn on
   Serial.begin(9600);
-  pinMode(PC13, OUTPUT);
+  pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT);
   while (digitalRead(VDO_PIN) == LOW) {
-    digitalWrite(PC13, HIGH);
+    digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.println("PSU UNDETECTED");
-  delay(1000); // Small delay to avoid busy-waiting
-  digitalWrite(PC13, LOW);
+  delay(500); // Small delay to avoid busy-waiting
+  digitalWrite(FAULT_LED_PIN, LOW);
+  delay(500);
   }
+  digitalWrite(FAULT_LED_PIN, HIGH);
   Serial.println("PSU DETECTED");
   // monitoring port
   //motor.useMonitoring(Serial);
@@ -204,6 +210,7 @@ current_sense.gain_c *= -1;
 void loop() {
 // Motor control loop
   current_time = HAL_GetTick();
+  handleFaultLed();
   float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
   //Serial.print(degrees);
   //Serial.print("\t");
@@ -232,8 +239,6 @@ if (current_time - t_debug >= 100) {
 t_debug = current_time;
  Serial.print("loop time: ");
  Serial.print(loop_dt);
-  Serial.print("brake state: ");
- Serial.println(brake_active);
   }
 }
 
@@ -518,3 +523,44 @@ static void configureUnusedPins(void){
 #else
 static void configureUnusedPins(void){}
 #endif
+
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+static bool isBreakActive(void){
+  TIM_HandleTypeDef* breakTimer = simplefoc_getBreakTimer();
+  if (!breakTimer) {
+    return false;
+  }
+  // MOE is forced low when the timer is broken and stays low until software re-enables the bridge
+  return (breakTimer->Instance->BDTR & TIM_BDTR_MOE) == 0;
+}
+
+static void blinkFaultLed(void){
+  const uint32_t blinkIntervalMs = 250;
+  static uint32_t lastToggle = 0;
+  static bool ledOn = false;
+  uint32_t now = HAL_GetTick();
+  if ((now - lastToggle) >= blinkIntervalMs) {
+    lastToggle = now;
+    ledOn = !ledOn;
+    digitalWrite(FAULT_LED_PIN, ledOn ? HIGH : LOW);
+  }
+}
+#else
+static bool isBreakActive(void){
+  return false;
+}
+
+static void blinkFaultLed(void){}
+#endif
+
+static void handleFaultLed(void){
+#if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
+  if (isBreakActive()) {
+    blinkFaultLed();
+  } else {
+    digitalWrite(FAULT_LED_PIN, HIGH);
+  }
+#else
+  digitalWrite(FAULT_LED_PIN, HIGH);
+#endif
+}
