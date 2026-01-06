@@ -116,7 +116,7 @@ void setup() {
    //configureBtsBreak();
   //configureUnusedPins();
   //MX_TIM3_Init();
-  MX_TIM2_Init();
+  //MX_TIM2_Init();
 
   Serial.begin(9600);
   pinMode(FAULT_LED_PIN, OUTPUT);
