@@ -115,7 +115,7 @@ void setup() {
    //Wait for PSU to turn on
   Serial.begin(9600);
   pinMode(FAULT_LED_PIN, OUTPUT);
-  pinMode(VDO_PIN, INPUT);
+  pinMode(VDO_PIN, INPUT_PULLDOWN);
   while (digitalRead(VDO_PIN) == LOW) {
     digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.println("PSU UNDETECTED");
