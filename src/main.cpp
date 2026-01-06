@@ -113,6 +113,11 @@ void setBandwidth(char* cmd) {
 
 void setup() {
    //Wait for PSU to turn on
+   configureBtsBreak();
+  configureUnusedPins();
+  //MX_TIM3_Init();
+  MX_TIM2_Init();
+  
   Serial.begin(9600);
   pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT_PULLDOWN);
@@ -143,10 +148,8 @@ current_sense.gain_c *= -1;
     Serial.printf("Driver init failed!\n");
     return;
   }
-  configureBtsBreak();
-  configureUnusedPins();
-  //MX_TIM3_Init();
-  MX_TIM2_Init();
+  
+  
 
   current_sense.linkDriver(&driver);
   current_sense.init();
