@@ -116,15 +116,15 @@ void setup() {
   Serial.begin(9600);
   pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT_PULLDOWN);
-  while (digitalRead(VDO_PIN) == LOW) {
-    digitalWrite(FAULT_LED_PIN, HIGH);
-    Serial.println("PSU UNDETECTED");
-  delay(500); // Small delay to avoid busy-waiting
-  digitalWrite(FAULT_LED_PIN, LOW);
-  delay(500);
-  }
-  digitalWrite(FAULT_LED_PIN, HIGH);
-  Serial.println("PSU DETECTED");
+  //while (digitalRead(VDO_PIN) == LOW) {
+  //  digitalWrite(FAULT_LED_PIN, HIGH);
+  //  Serial.println("PSU UNDETECTED");
+  //delay(500); // Small delay to avoid busy-waiting
+  //digitalWrite(FAULT_LED_PIN, LOW);
+  //delay(500);
+  //}
+  //digitalWrite(FAULT_LED_PIN, HIGH);
+  //Serial.println("PSU DETECTED");
   // monitoring port
   //motor.useMonitoring(Serial);
 
@@ -143,7 +143,7 @@ current_sense.gain_c *= -1;
     Serial.printf("Driver init failed!\n");
     return;
   }
-  //configureBtsBreak();
+  configureBtsBreak();
   configureUnusedPins();
   //MX_TIM3_Init();
   MX_TIM2_Init();
