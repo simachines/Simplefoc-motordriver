@@ -331,7 +331,7 @@ static void MX_TIM2_Init(void){
   __HAL_RCC_GPIOA_CLK_ENABLE();
  __HAL_RCC_TIM2_CLK_ENABLE();
 
- GPIO_InitStruct.Pin = GPIO_PIN_0;
+ GPIO_InitStruct.Pin = GPIO_PIN_3;
  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;  
  GPIO_InitStruct.Pull = GPIO_PULLDOWN;       
  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;  
