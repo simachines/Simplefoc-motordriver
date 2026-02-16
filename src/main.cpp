@@ -48,7 +48,7 @@ static TIM_HandleTypeDef* simplefoc_getBreakTimer(void);
 static void enableGpioPortClock(GPIO_TypeDef* port);
 #endif
 static void configureBtsBreak(void);
-static void configureUnusedPins(void);
+//static void configureUnusedPins(void);
 static void handleFaultLed(void);
 static bool isBreakActive(void);
 static void blinkFaultLed(void);
@@ -493,39 +493,6 @@ struct IdlePin {
   GPIO_TypeDef* port;
   uint16_t pin;
 };
-
-static void configureUnusedPins(void){
-  constexpr IdlePin pins[] = {
-    {GPIOB, GPIO_PIN_10},
-    {GPIOB, GPIO_PIN_2},
-    {GPIOB, GPIO_PIN_1},
-    {GPIOB, GPIO_PIN_0},
-    {GPIOC, GPIO_PIN_15},
-    {GPIOC, GPIO_PIN_14},
-    {GPIOB, GPIO_PIN_13},
-    {GPIOB, GPIO_PIN_14},
-    {GPIOB, GPIO_PIN_15},
-    {GPIOA, GPIO_PIN_12},
-    {GPIOA, GPIO_PIN_15},
-    {GPIOB, GPIO_PIN_3},
-    {GPIOB, GPIO_PIN_5},
-    {GPIOB, GPIO_PIN_8},
-    {GPIOB, GPIO_PIN_9},
-  };
-  GPIO_InitTypeDef gpio = {0};
-  gpio.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio.Pull = GPIO_NOPULL;
-  gpio.Speed = GPIO_SPEED_FREQ_LOW;
-  for (const IdlePin& pin : pins) {
-    enableGpioPortClock(pin.port);
-    gpio.Pin = pin.pin;
-    HAL_GPIO_Init(pin.port, &gpio);
-    HAL_GPIO_WritePin(pin.port, pin.pin, GPIO_PIN_RESET);
-  }
-}
-#else
-static void configureUnusedPins(void){}
-#endif
 
 #if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
 static bool isBreakActive(void){
