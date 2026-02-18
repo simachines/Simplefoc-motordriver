@@ -3,7 +3,10 @@
 #include "encoders/mt6835/MagneticSensorMT6835.h"
 #if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
-
+#include "encoders/stm32hwencoder/STM32HWEncoder.h"
+#endif
+#if defined(_STM32G4_DEF_)
+#include "utilities/stm32math/STM32G4CORDICTrigFunctions.h"
 #endif
 
 
@@ -18,7 +21,7 @@
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
 #define BTS_OC_AF GPIO_AF6_TIM1
 #define BTS_OC_ACTIVE_LOW false
-#define FAULT_LED_PIN PC_13
+#define FAULT_LED_PIN PC_6
 #define VDO_PIN PA_0
 #define currentPHA PA_2
 #define currentPHC PA_3
@@ -81,6 +84,9 @@ uint32_t t_debug = 0;
 uint32_t t_pwm = 0;
 uint16_t loop_dt = 0;
 uint32_t t_last_loop = 0;
+constexpr float VBUS_RESISTOR_TOP_OHMS = 10000.0f;
+constexpr float VBUS_RESISTOR_BOTTOM_OHMS = 1000.0f;
+constexpr float v_bus_scale = (VBUS_RESISTOR_TOP_OHMS + VBUS_RESISTOR_BOTTOM_OHMS) / VBUS_RESISTOR_BOTTOM_OHMS; // automatically uses the divider ratio
 
 uint16_t MAX_REGEN_CURRENT = 0 * 100; // Amps * 100
 uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
@@ -92,10 +98,10 @@ LowsideCurrentSense current_sense = LowsideCurrentSense(66.0f, (int)currentPHA, 
 SPIClass SPI_3((int)MT6835_SPI_MOSI, (int)MT6835_SPI_MISO, (int)MT6835_SPI_SCK);
 SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
 MagneticSensorMT6835 encoder = MagneticSensorMT6835((int)MT6835_SPI_CS, mt6835_spi_settings);
-
+//SimpleFOCDebug debug;
 Commander commander = Commander(Serial);
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
-
+int check_vbus();
 void setBandwidth(char* cmd) {
   float new_bandwidth = current_bandwidth;  // Default to current value
   commander.scalar(&new_bandwidth, cmd);
@@ -127,7 +133,12 @@ void setup() {
   //MX_TIM3_Init();
   //MX_TIM2_Init();
 
-  Serial.begin(9600);
+  Serial.begin(230400);
+  //debug.enable();
+#if defined(_STM32G4_DEF_)
+    SimpleFOC_CORDIC_Config();      // initialize the CORDIC on STM32G4
+#endif
+
   pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT_PULLDOWN);
   while (digitalRead(VDO_PIN) == LOW) {
@@ -234,10 +245,23 @@ void loop() {
   motor.move();
   //motor.move(target_current);
   }
+  check_vbus();
   commander.run();
 }
 
-
+int check_vbus() {
+  float v_bus = _readADCVoltageLowSide(VDO_PIN,current_sense.params)*v_bus_scale;
+  driver.voltage_power_supply = v_bus;
+  driver.voltage_limit = driver.voltage_power_supply*0.9;
+  int error = 0;
+  if (v_bus > 24.0f) {
+    motor.target = 0;
+    motor.disable();
+    error = 1;
+    Serial.printf("Overvoltage: Motor off\n");
+  }
+  return error;
+}
 
 void loop_time(void){
 loop_dt = current_time - t_last_loop;
