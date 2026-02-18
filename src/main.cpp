@@ -1,8 +1,9 @@
 #include "SimpleFOC.h"
 #include "SimpleFOCDrivers.h"
-#include "encoders/stm32hwencoder/STM32HWEncoder.h"
+#include "encoders/mt6835/MagneticSensorMT6835.h"
 #if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
+
 #endif
 
 
@@ -15,10 +16,10 @@
 #define BTS_OC PB12
 #define BTS_OC_GPIO_PORT GPIOB
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
-#define BTS_OC_AF GPIO_AF1_TIM1
+#define BTS_OC_AF GPIO_MODE_AF_OD
 #define BTS_OC_ACTIVE_LOW false
 #define FAULT_LED_PIN PC13
-#define VDO_PIN PA1
+#define VDO_PIN PA0
 #define currentPHA PA2
 #define currentPHC PA3
 
@@ -26,6 +27,10 @@
 #define ENCODER_PPR 16384
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
+#define MT6835_SPI_MOSI PB5
+#define MT6835_SPI_MISO PC11
+#define MT6835_SPI_SCK  PC10
+#define MT6835_SPI_CS   PA15
 #define RAD_2_DEG 57.2957795131f
 #define PWM_FREQ 16000 //16kHz
 //Motor setup parameters
@@ -82,7 +87,9 @@ uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
 BLDCDriver3PWM driver = BLDCDriver3PWM(PH_A, PH_B, PH_C, BTS_ENABLE);
 LowsideCurrentSense current_sense = LowsideCurrentSense(66.0f, currentPHA, _NC, currentPHC);
-STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
+SPIClass SPI_3(MT6835_SPI_MOSI, MT6835_SPI_MISO, MT6835_SPI_SCK);
+SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
+MagneticSensorMT6835 encoder = MagneticSensorMT6835(MT6835_SPI_CS, mt6835_spi_settings);
 
 Commander commander = Commander(Serial);
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
@@ -121,17 +128,17 @@ void setup() {
   Serial.begin(9600);
   pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT_PULLDOWN);
-  //while (digitalRead(VDO_PIN) == LOW) {
-  //  digitalWrite(FAULT_LED_PIN, HIGH);
-  //  Serial.println("PSU UNDETECTED");
-  //delay(500); // Small delay to avoid busy-waiting
-  //digitalWrite(FAULT_LED_PIN, LOW);
-  //delay(500);
-  //}
-  //digitalWrite(FAULT_LED_PIN, HIGH);
-  //Serial.println("PSU DETECTED");
+  while (digitalRead(VDO_PIN) == LOW) {
+    digitalWrite(FAULT_LED_PIN, HIGH);
+    Serial.println("PSU UNDETECTED");
+  delay(500); // Small delay to avoid busy-waiting
+  digitalWrite(FAULT_LED_PIN, LOW);
+  delay(500);
+  }
+  digitalWrite(FAULT_LED_PIN, HIGH);
+  Serial.println("PSU DETECTED");
   // monitoring port
-  //motor.useMonitoring(Serial);
+  motor.useMonitoring(Serial);
 
   
 current_sense.gain_a *= -1;
@@ -183,12 +190,7 @@ current_sense.gain_c *= -1;
   motor.linkCurrentSense(&current_sense);
   motor.init();
 
-  encoder.init();
-  if (!encoder.initialized){
-    simplefoc_init=false;
-    Serial.printf("Encoder init failed!\n");
-    return;
-  }
+  encoder.init(&SPI_3);
   motor.linkSensor(&encoder);  
   
   if (!motor.initFOC()){
@@ -332,7 +334,7 @@ static void MX_TIM15_Init(void)
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStruct.Pull = GPIO_PULLDOWN;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF2_TIM15;
+    GPIO_InitStruct.Alternate = GPIO_MODE_AF_OD;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE END TIM15_Init 1 */
