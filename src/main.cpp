@@ -6,10 +6,16 @@
 
 #endif
 
+//#if defined(USBCON)
+//#define Serial SerialUSB
+//#endif
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 #define BRAKE_RESISTOR PB_4
-#define BTS_ENABLE PA_11
+#ifndef BTS_ENABLE_PIN
+#define BTS_ENABLE_PIN PA_11
+#endif
+#define BTS_ENABLE BTS_ENABLE_PIN
 #define PH_B PA_9 
 #define PH_C PA_8
 #define PH_A PA_10
@@ -18,7 +24,7 @@
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
 #define BTS_OC_AF GPIO_AF6_TIM1
 #define BTS_OC_ACTIVE_LOW false
-#define FAULT_LED_PIN PC_13
+#define FAULT_LED_PIN LED_BUILTIN
 #define VDO_PIN PA_0
 #define currentPHA PA_2
 #define currentPHC PA_3
@@ -60,14 +66,12 @@ static void handleFaultLed(void);
 static bool isBreakActive(void);
 static void blinkFaultLed(void);
  void calc_hw_pwm(void);
- void loop_time(void);
+ //void loop_time(void);
  void brake_control(void);
 
 // Voltage monitoring variables
 uint16_t supply_voltage_V = 24;
 uint16_t supply_voltage_Vx10000 = supply_voltage_V * 10000;
-
-
 uint32_t period_ticks = 0;
 uint32_t duty_ticks = 0;
 uint16_t dutyPercent = 0;
@@ -86,6 +90,8 @@ uint16_t MAX_REGEN_CURRENT = 0 * 100; // Amps * 100
 uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
 uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
 // Motor and driver objects
+SimpleFOCDebug debug;
+
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
 BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE);
 LowsideCurrentSense current_sense = LowsideCurrentSense(66.0f, (int)currentPHA, _NC, (int)currentPHC);
@@ -127,21 +133,28 @@ void setup() {
   //MX_TIM3_Init();
   //MX_TIM2_Init();
 
-  Serial.begin(9600);
+  Serial.begin(230400);
+    debug.enable();
+  //SimpleFOC_CORDIC_Config();      // initialize the CORDIC
+  // Commander setup
+  commander.add('B', setBandwidth, "Set current control bandwidth (Hz)");
+  commander.add('M', onMotor, "my motor motion");
   pinMode(FAULT_LED_PIN, OUTPUT);
   pinMode(VDO_PIN, INPUT_PULLDOWN);
-  while (digitalRead(VDO_PIN) == LOW) {
+  delay(1000);
+
+  while (digitalRead(VDO_PIN) == HIGH) {
     digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.println("PSU UNDETECTED");
-  delay(500); // Small delay to avoid busy-waiting
-  digitalWrite(FAULT_LED_PIN, LOW);
-  delay(500);
+    delay(500); // Small delay to avoid busy-waiting
+    digitalWrite(FAULT_LED_PIN, LOW);
+    delay(500);
   }
   digitalWrite(FAULT_LED_PIN, HIGH);
   Serial.println("PSU DETECTED");
+
   // monitoring port
   motor.useMonitoring(Serial);
-
   
 current_sense.gain_a *= -1;
 current_sense.gain_c *= -1;
@@ -157,9 +170,6 @@ current_sense.gain_c *= -1;
     Serial.printf("Driver init failed!\n");
     return;
   }
-  
-  
-
   current_sense.linkDriver(&driver);
   current_sense.init();
 
@@ -186,12 +196,13 @@ current_sense.gain_c *= -1;
   motor.current_limit = maxCurrent;
   motor.phase_resistance = phase_resistance;
   motor.voltage_sensor_align = alignStrength;
-  motor.monitor_downsample = 500;
+  motor.monitor_downsample = 100;
   motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_VOLT_Q | _MON_VEL | _MON_ANGLE;
   motor.linkDriver(&driver); 
   motor.linkCurrentSense(&current_sense);
+  motor.modulation_centered = 1;
   motor.init();
-
+  motor.initFOC();
   encoder.init(&SPI_3);
   motor.linkSensor(&encoder);  
   
@@ -200,9 +211,14 @@ current_sense.gain_c *= -1;
     Serial.printf("initFOC failed!\n");
     return;
   }
-   // Commander setup
-  commander.add('B', setBandwidth, "Set current control bandwidth (Hz)");
-  commander.add('M', onMotor, "my motor motion");
+
+   int m_init = motor.init();
+  Serial.printf("Motor init status: %d\n", m_init);
+
+  int foc_init = motor.initFOC();
+  Serial.printf("FOC init status: %d\n", foc_init);
+
+  /* 
   if (simplefoc_init){
     simplefoc_init_finish=true;
     Serial.printf("SimpleFOC initialization complete.\n");
@@ -212,33 +228,39 @@ current_sense.gain_c *= -1;
     motor.disable();
     Serial.printf("SimpleFOC initialization failed.\n");
   }
+  */
 }
 
 void loop() {
-// Motor control loop
+  motor.loopFOC();
+  commander.run();
   current_time = HAL_GetTick();
-  handleFaultLed();
+
+
+   if ((current_time - t_pwm ) >= 1){
+    t_pwm  = current_time;
+  //calc_hw_pwm();
+  motor.move();
   float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+  //Serial.print(degrees);
+  //motor.move(target_current);
+  }
+
+  //handleFaultLed();
   //Serial.print(degrees);
   //Serial.print("\t");
   //Serial.println(encoder.getVelocity());
 
-  loop_time();
-  motor.loopFOC();
-  if (simplefoc_init_finish){
+  //loop_time();
+  //if (simplefoc_init_finish){
    //brake_control();
-  }
-  if ((current_time - t_pwm ) >= 1){
-    t_pwm  = current_time;
-  calc_hw_pwm();
-  motor.move();
-  //motor.move(target_current);
-  }
-  commander.run();
+  //}
+ 
+  
 }
 
 
-
+/*
 void loop_time(void){
 loop_dt = current_time - t_last_loop;
 t_last_loop = current_time;
@@ -248,7 +270,7 @@ t_debug = current_time;
  Serial.print(loop_dt);
   }
 }
-
+  
 void brake_control(void){
        I_Bus = -current_sense.getDCCurrent(motor.electrical_angle) * 100 - MAX_REGEN_CURRENT; // Negate to flip polarity
     if (I_Bus > BRKRESACT_SENS){ // If over max regen current
@@ -270,19 +292,19 @@ static void MX_TIM3_Init(void){
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
  uint32_t timClockHz = HAL_RCC_GetPCLK1Freq();
- /* TIM3 is on APB1. If APB1 prescaler != 1, timer clock is PCLK1*2 */
+ /* TIM3 is on APB1. If APB1 prescaler != 1, timer clock is PCLK1*2 
   if ((RCC->CFGR & RCC_CFGR_PPRE1) != RCC_CFGR_PPRE1_DIV1) {
   timClockHz *= 2U;
  }
 
- /* period counts = timer clock / PWM freq (no extra /2) */
+ /* period counts = timer clock / PWM freq (no extra /2) 
  pwmPeriodCounts = timClockHz / PWM_FREQ;
  if (pwmPeriodCounts == 0U) {
   pwmPeriodCounts = 1U;
  }
 
-
-  /* USER CODE BEGIN TIM3_Init 1 */
+ 
+  /* USER CODE BEGIN TIM3_Init 1 
     GPIO_InitStruct.Pin = GPIO_PIN_4;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStruct.Pull = GPIO_PULLDOWN;
@@ -290,7 +312,7 @@ static void MX_TIM3_Init(void){
     GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /* USER CODE END TIM3_Init 1 */
+  /* USER CODE END TIM3_Init 1
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -324,15 +346,15 @@ static void MX_TIM3_Init(void){
 static void MX_TIM15_Init(void)
 {
 
-  /* USER CODE BEGIN TIM15_Init 0 */
+  /* USER CODE BEGIN TIM15_Init 0
 
-  /* USER CODE END TIM15_Init 0 */
+  /* USER CODE END TIM15_Init 0 
 
   TIM_SlaveConfigTypeDef sSlaveConfig = {0};
   TIM_IC_InitTypeDef sConfigIC = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN TIM15_Init 1 */
+  /* USER CODE BEGIN TIM15_Init 1
     GPIO_InitStruct.Pin = GPIO_PIN_3;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStruct.Pull = GPIO_PULLDOWN;
@@ -340,7 +362,7 @@ static void MX_TIM15_Init(void)
     GPIO_InitStruct.Alternate = GPIO_AF9_TIM15;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /* USER CODE END TIM15_Init 1 */
+  /* USER CODE END TIM15_Init 1 
   htim15.Instance = TIM15;
   htim15.Init.Prescaler = 0;
   htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -381,14 +403,12 @@ static void MX_TIM15_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM15_Init 2 */
-
-  /* USER CODE END TIM15_Init 2 */
+  /* USER CODE BEGIN TIM15_Init 2
 
 }
 #endif
 void calc_hw_pwm(void){
-  /* Read capture registers directly from TIM3 handle (no IRQ required) */
+  /* Read capture registers directly from TIM3 handle (no IRQ required)
 #if defined(TIM15)
   duty_ticks = HAL_TIM_ReadCapturedValue(&htim15, TIM_CHANNEL_2);   // CH2 captures high time (falling edge)
   period_ticks = HAL_TIM_ReadCapturedValue(&htim15, TIM_CHANNEL_1); // CH1 captures period (rising edge)
@@ -401,7 +421,7 @@ void calc_hw_pwm(void){
         target_current = dutyPercent - 16000u; 
 
         //duty_scaled = (duty_ticks * 32000u) / period_ticks;
-        //pwmduty = duty_scaled - 16000u;             /* Center */
+        //pwmduty = duty_scaled - 16000u;             /* Center
        
     }
 #else
@@ -494,7 +514,7 @@ struct IdlePin {
   GPIO_TypeDef* port;
   uint16_t pin;
 };
-*/
+
 #if defined(_STM32_DEF_) || defined(TARGET_STM32H7)
 static bool isBreakActive(void){
   TIM_HandleTypeDef* breakTimer = simplefoc_getBreakTimer();
@@ -534,4 +554,4 @@ static void handleFaultLed(void){
 #else
   digitalWrite(FAULT_LED_PIN, HIGH);
 #endif
-}
+}*/
