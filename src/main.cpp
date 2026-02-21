@@ -8,7 +8,7 @@
 //#define PWM_INPUT
 #define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
-//#define BRAKE_VOLTAGE_RAMP_ENABLED
+#define BRAKE_VOLTAGE_RAMP_ENABLED
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
 #endif
@@ -113,6 +113,15 @@ uint32_t t_debug = 0;
 uint32_t t_pwm = 0;
 uint16_t loop_dt = 0;
 uint32_t t_last_loop = 0;
+uint32_t t_control_us = 0;
+constexpr uint32_t CONTROL_LOOP_PERIOD_US = 500; // 2kHz
+volatile uint32_t main_loop_counter = 0;
+volatile uint32_t control_loop_counter = 0;
+volatile uint32_t main_loop_hz = 0;
+volatile uint32_t control_loop_hz = 0;
+uint32_t speed_calc_last_us = 0;
+uint32_t main_loop_counter_prev = 0;
+uint32_t control_loop_counter_prev = 0;
 uint16_t MAX_REGEN_CURRENT = 0 * 100; // Amps * 100
 uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
 float v_bus = 0.00f;
@@ -145,6 +154,22 @@ void check_vbus();
  static bool configureBrakePwm(void);
 #endif
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
+
+static inline uint32_t get_systick_time_us() {
+  const uint32_t reload = SysTick->LOAD + 1u;
+  uint32_t ms_start = 0;
+  uint32_t ms_end = 0;
+  uint32_t ticks = 0;
+
+  do {
+    ms_start = HAL_GetTick();
+    ticks = SysTick->VAL;
+    ms_end = HAL_GetTick();
+  } while (ms_start != ms_end);
+
+  const uint32_t sub_ms_us = ((reload - ticks) * 1000u) / reload;
+  return (ms_start * 1000u) + sub_ms_us;
+}
 
 void setBandwidth(char* cmd) {
   float new_bandwidth = current_bandwidth;  // Default to current value
@@ -321,17 +346,18 @@ void setup(){
   current_sense.linkDriver(&driver);
   current_sense.init();
   
- float v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
-	 while (v_bus < 23) {
+  v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
+	 //while (v_bus < 23  || v_bus > 25) {
+    while (v_bus < 23) {
     digitalWrite(FAULT_LED_PIN, HIGH);
-    Serial.printf("PSU UNDETECTED : %.2f V\n", v_bus);
+    Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
     delay(500); // Small delay to avoid busy-waiting
     digitalWrite(FAULT_LED_PIN, LOW);
     delay(500);
     v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
   }
   digitalWrite(FAULT_LED_PIN, HIGH);
-  Serial.printf("PSU DETECTED: %.2f V\n", v_bus);
+  Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
   motor.useMonitoring(Serial);  
   //motor.controller = MotionControlType::torque;
   motor.controller = MotionControlType::angle_openloop;
@@ -365,32 +391,55 @@ void setup(){
 
   int foc_init = motor.initFOC();
   Serial.printf("FOC init status: %d\n", foc_init);
+  const uint32_t now_us = get_systick_time_us();
+  t_control_us = now_us;
+  speed_calc_last_us = now_us;
 }
 
 void loop() {
+	 main_loop_counter++;
 	 motor.loopFOC();
      commander.run();
      motor.move();
-  current_time = HAL_GetTick();
 
+  const uint32_t now_us = get_systick_time_us();
+  if ((uint32_t)(now_us - t_control_us) >= CONTROL_LOOP_PERIOD_US) {
+    t_control_us += CONTROL_LOOP_PERIOD_US;
+    control_loop_counter++;
 
-   if ((current_time - t_pwm ) >= 200){
-    t_pwm  = current_time;
-    #if defined(PWM_INPUT)
-  calc_hw_pwm();
+  #if defined(PWM_INPUT)
+    calc_hw_pwm();
   #endif
   #if defined(BRAKE_CONTROL_ENABLED)
     #if defined(BRAKE_PWM_TEST_MODE)
-  const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
-  __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
+    const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
+    __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
     #else
-  brake_control();
+    brake_control();
     #endif
   #endif
-  check_vbus();
+    check_vbus();
+  }
   float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+
+  //current_time = now_us / 1000u;
+  // if ((current_time - t_pwm ) >= 200){
+   // t_pwm  = current_time;
   //Serial.println("Hello world!");
   //motor.move(target_current);
+  //}
+
+  if ((uint32_t)(now_us - speed_calc_last_us) >= 1000000u) {
+    const uint32_t dt_us = now_us - speed_calc_last_us;
+    const uint32_t main_delta = main_loop_counter - main_loop_counter_prev;
+    const uint32_t control_delta = control_loop_counter - control_loop_counter_prev;
+
+    main_loop_hz = (uint32_t)(((uint64_t)main_delta * 1000000ull) / dt_us);
+    control_loop_hz = (uint32_t)(((uint64_t)control_delta * 1000000ull) / dt_us);
+
+    main_loop_counter_prev = main_loop_counter;
+    control_loop_counter_prev = control_loop_counter;
+    speed_calc_last_us = now_us;
   }
 
 }
@@ -420,7 +469,7 @@ void calc_hw_pwm(void){
 #endif
 
 void check_vbus() {
-  float v_bus = _readADCVoltageLowSide(A_VBUS,current_sense.params)*v_bus_scale;
+  v_bus = _readADCVoltageLowSide(A_VBUS,current_sense.params)*v_bus_scale;
   //
   //driver.voltage_power_supply = v_bus;
   //driver.voltage_limit = driver.voltage_power_supply*0.9;
