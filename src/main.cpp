@@ -5,7 +5,7 @@
 #include "encoders/mt6835/MagneticSensorMT6835.h"
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 //#define BTS_BREAK
-//#define PWM_INPUT
+#define PWM_INPUT
 #define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
 #define BRAKE_VOLTAGE_RAMP_ENABLED
@@ -41,6 +41,8 @@
 #define MT6835_SPI_CS   PA15
 uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
 constexpr int pole_pairs = 15;
+float phase_resistance = 0.3f; // Ohms
+constexpr int supply_voltage_V = 24;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PA3);
 #endif
@@ -72,9 +74,11 @@ static void configureBtsBreak(void);
 #define MT6835_SPI_SCK  PB13
 #define MT6835_SPI_CS   PB12
 uint16_t BRAKE_RESISTANCE = 2 * 100;   // Ohms * 100
+float phase_resistance = 5.0f; // Ohms
 constexpr int pole_pairs = 6;
+constexpr int supply_voltage_V = 12;
 #if defined(PWM_INPUT)
-STM32PWMInput pwmInput = STM32PWMInput(PB14);
+STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
 
 
@@ -88,7 +92,6 @@ STM32PWMInput pwmInput = STM32PWMInput(PB14);
 #define BRAKE_PWM_TEST_DUTY_PERCENT 25U
 
 //Motor setup parameters
-float phase_resistance = 0.6;
 float phase_inductance = 0.0003;
 float motor_KV = _NC;
 float maxCurrent = 10;
@@ -96,7 +99,6 @@ float alignStrength = 4;
 float current_bandwidth = 100; //hz
 
 uint16_t pwmPeriodCounts = 0;
-uint16_t supply_voltage_V = 24;
 uint16_t supply_voltage_Vx10000 = supply_voltage_V * 10000;
 uint32_t period_ticks = 0;
 uint32_t duty_ticks = 0;
@@ -127,8 +129,8 @@ uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
 float v_bus = 0.00f;
 
 #if defined(BRAKE_VOLTAGE_RAMP_ENABLED)
-constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = 26.0f;
-constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = 28.0f;
+constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = supply_voltage_V + 0.5f;
+constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 1.5f;
 #endif
 constexpr float VBUS_RESISTOR_TOP_OHMS = 10000.0f;
 constexpr float VBUS_RESISTOR_BOTTOM_OHMS = 1000.0f;
