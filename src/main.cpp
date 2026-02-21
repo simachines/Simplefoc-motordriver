@@ -6,7 +6,9 @@
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 //#define BTS_BREAK
 //#define PWM_INPUT
-//#define BRAKE_CONTROL_ENABLED
+#define BRAKE_CONTROL_ENABLED
+//#define BRAKE_PWM_TEST_MODE
+//#define BRAKE_VOLTAGE_RAMP_ENABLED
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
 #endif
@@ -37,6 +39,8 @@
 #define MT6835_SPI_MISO PC11
 #define MT6835_SPI_SCK  PC10
 #define MT6835_SPI_CS   PA15
+uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
+constexpr int pole_pairs = 15;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PA3);
 #endif
@@ -67,6 +71,8 @@ static void configureBtsBreak(void);
 #define MT6835_SPI_MISO PC2
 #define MT6835_SPI_SCK  PB13
 #define MT6835_SPI_CS   PB12
+uint16_t BRAKE_RESISTANCE = 2 * 100;   // Ohms * 100
+constexpr int pole_pairs = 6;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PB14);
 #endif
@@ -78,9 +84,10 @@ STM32PWMInput pwmInput = STM32PWMInput(PB14);
 #define ENCODER_PPR 16384
 #define RAD_2_DEG 57.2957795131f
 #define PWM_FREQ 16000 //16kHz
+#define BRAKE_PWM_FREQ 20000 //20kHz
+#define BRAKE_PWM_TEST_DUTY_PERCENT 25U
 
 //Motor setup parameters
-constexpr int pole_pairs = 15;
 float phase_resistance = 0.6;
 float phase_inductance = 0.0003;
 float motor_KV = _NC;
@@ -108,7 +115,12 @@ uint16_t loop_dt = 0;
 uint32_t t_last_loop = 0;
 uint16_t MAX_REGEN_CURRENT = 0 * 100; // Amps * 100
 uint16_t BRKRESACT_SENS = 1;     // Threshold in Amps x 100
-uint16_t BRAKE_RESISTANCE = 5 * 100;   // Ohms * 100
+float v_bus = 0.00f;
+
+#if defined(BRAKE_VOLTAGE_RAMP_ENABLED)
+constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = 26.0f;
+constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = 28.0f;
+#endif
 constexpr float VBUS_RESISTOR_TOP_OHMS = 10000.0f;
 constexpr float VBUS_RESISTOR_BOTTOM_OHMS = 1000.0f;
 constexpr float v_bus_scale = (VBUS_RESISTOR_TOP_OHMS + VBUS_RESISTOR_BOTTOM_OHMS) / VBUS_RESISTOR_BOTTOM_OHMS; // divider ratio
@@ -128,7 +140,9 @@ Commander commander = Commander(Serial);
 void calc_hw_pwm();
 void check_vbus();
 #if defined(BRAKE_CONTROL_ENABLED)
+ void vbus_sense_adc_cb(uint32_t adc_value);
  void brake_control(void);
+ static bool configureBrakePwm(void);
 #endif
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
 
@@ -156,6 +170,107 @@ void setBandwidth(char* cmd) {
   }
 
 }
+
+#if defined(BRAKE_CONTROL_ENABLED)
+#if defined(STM32G4)
+#define BRAKE_PWM_TIMER TIM16
+#define BRAKE_PWM_CHANNEL TIM_CHANNEL_1
+#define BRAKE_PWM_GPIO_PORT GPIOB
+#define BRAKE_PWM_GPIO_PIN GPIO_PIN_4
+#define BRAKE_PWM_GPIO_AF GPIO_AF1_TIM16
+#elif defined(STM32F4)
+#define BRAKE_PWM_TIMER TIM12
+#define BRAKE_PWM_CHANNEL TIM_CHANNEL_1
+#define BRAKE_PWM_GPIO_PORT GPIOB
+#define BRAKE_PWM_GPIO_PIN GPIO_PIN_14
+#define BRAKE_PWM_GPIO_AF GPIO_AF9_TIM12
+#endif
+
+static TIM_HandleTypeDef htim_brake = {0};
+
+static uint32_t getBrakeTimerClockHz(void) {
+  RCC_ClkInitTypeDef clkInit = {0};
+  uint32_t flashLatency = 0;
+  HAL_RCC_GetClockConfig(&clkInit, &flashLatency);
+
+#if defined(STM32G4)
+  const bool onApb2 = true;  // TIM16 is on APB2
+#else
+  const bool onApb2 = false; // TIM12 is on APB1
+#endif
+
+  const uint32_t pclk = onApb2 ? HAL_RCC_GetPCLK2Freq() : HAL_RCC_GetPCLK1Freq();
+  const uint32_t divider = onApb2 ? clkInit.APB2CLKDivider : clkInit.APB1CLKDivider;
+  return (divider == RCC_HCLK_DIV1) ? pclk : (pclk * 2u);
+}
+
+static bool configureBrakePwm(void) {
+#if defined(STM32G4)
+  __HAL_RCC_TIM16_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+#elif defined(STM32F4)
+  __HAL_RCC_TIM12_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+#endif
+
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitStruct.Pin = BRAKE_PWM_GPIO_PIN;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.Alternate = BRAKE_PWM_GPIO_AF;
+  HAL_GPIO_Init(BRAKE_PWM_GPIO_PORT, &GPIO_InitStruct);
+
+  const uint32_t timerClkHz = getBrakeTimerClockHz();
+  if (timerClkHz == 0u) {
+    return false;
+  }
+
+  uint32_t prescaler = 0;
+  uint32_t periodCounts = timerClkHz / BRAKE_PWM_FREQ;
+  if (periodCounts == 0u) {
+    return false;
+  }
+
+  while (periodCounts > 0xFFFFu) {
+    prescaler++;
+    periodCounts = timerClkHz / ((prescaler + 1u) * BRAKE_PWM_FREQ);
+    if (periodCounts == 0u) {
+      return false;
+    }
+  }
+
+  htim_brake.Instance = BRAKE_PWM_TIMER;
+  htim_brake.Init.Prescaler = prescaler;
+  htim_brake.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim_brake.Init.Period = periodCounts - 1u;
+  htim_brake.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim_brake.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+
+  if (HAL_TIM_PWM_Init(&htim_brake) != HAL_OK) {
+    return false;
+  }
+
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+
+  if (HAL_TIM_PWM_ConfigChannel(&htim_brake, &sConfigOC, BRAKE_PWM_CHANNEL) != HAL_OK) {
+    return false;
+  }
+
+  if (HAL_TIM_PWM_Start(&htim_brake, BRAKE_PWM_CHANNEL) != HAL_OK) {
+    return false;
+  }
+
+  pwmPeriodCounts = static_cast<uint16_t>(htim_brake.Init.Period + 1u);
+  __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, 0);
+  return true;
+}
+#endif
+
 void setup(){
 
 	Serial.begin(230400);
@@ -187,6 +302,18 @@ void setup(){
   #if defined(BTS_BREAK)
   configureBtsBreak();
   #endif
+  #if defined(BRAKE_CONTROL_ENABLED)
+  if (!configureBrakePwm()) {
+    Serial.println("Brake PWM init failed");
+  }
+  #if defined(BRAKE_PWM_TEST_MODE)
+  else {
+    const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
+    __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
+    Serial.printf("BRAKE PWM TEST MODE: %u%% duty\n", BRAKE_PWM_TEST_DUTY_PERCENT);
+  }
+  #endif
+  #endif
 
   motor.linkSensor(&encoder); 
   motor.linkDriver(&driver); 
@@ -194,20 +321,21 @@ void setup(){
   current_sense.linkDriver(&driver);
   current_sense.init();
   
- float v_bus = analogRead(A_VBUS) * VBUS_ADC_SCALE * v_bus_scale;
+ float v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
 	 while (v_bus < 23) {
     digitalWrite(FAULT_LED_PIN, HIGH);
-    Serial.printf("PSU UNDETECTED : %.5f V\n", v_bus);
+    Serial.printf("PSU UNDETECTED : %.2f V\n", v_bus);
     delay(500); // Small delay to avoid busy-waiting
     digitalWrite(FAULT_LED_PIN, LOW);
     delay(500);
-    v_bus = analogRead(A_VBUS) * VBUS_ADC_SCALE * v_bus_scale;
+    v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
   }
   digitalWrite(FAULT_LED_PIN, HIGH);
-  Serial.printf("PSU DETECTED: %.5f V\n", v_bus);
+  Serial.printf("PSU DETECTED: %.2f V\n", v_bus);
   motor.useMonitoring(Serial);  
-  motor.controller = MotionControlType::torque;
-  motor.torque_controller = TorqueControlType::foc_current;
+  //motor.controller = MotionControlType::torque;
+  motor.controller = MotionControlType::angle_openloop;
+  motor.torque_controller = TorqueControlType::voltage;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 // Limits and parameters
@@ -251,6 +379,14 @@ void loop() {
     #if defined(PWM_INPUT)
   calc_hw_pwm();
   #endif
+  #if defined(BRAKE_CONTROL_ENABLED)
+    #if defined(BRAKE_PWM_TEST_MODE)
+  const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
+  __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
+    #else
+  brake_control();
+    #endif
+  #endif
   check_vbus();
   float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
   //Serial.println("Hello world!");
@@ -286,9 +422,9 @@ void calc_hw_pwm(void){
 void check_vbus() {
   float v_bus = _readADCVoltageLowSide(A_VBUS,current_sense.params)*v_bus_scale;
   //
-  driver.voltage_power_supply = v_bus;
-  driver.voltage_limit = driver.voltage_power_supply*0.9;
-  motor.voltage_limit = driver.voltage_power_supply *0.58f;
+  //driver.voltage_power_supply = v_bus;
+  //driver.voltage_limit = driver.voltage_power_supply*0.9;
+  //motor.voltage_limit = driver.voltage_power_supply *0.58f;
   /*
   if (v_bus > 26.0f) {
     motor.target = 0;
@@ -307,10 +443,12 @@ void check_vbus() {
 }
 
 #if defined(BRAKE_CONTROL_ENABLED)
+
  void brake_control(void){
-    static int16_t regenCur = -current_sense.getDCCurrent(motor.electrical_angle) * 100 - MAX_REGEN_CURRENT;;
+  static int16_t regenCur = -current_sense.getDCCurrent(motor.electrical_angle) * 100 - MAX_REGEN_CURRENT;
     const int16_t brkOnThresh = BRKRESACT_SENS;
     const int16_t brkOffThresh = (BRKRESACT_SENS > 1) ? (BRKRESACT_SENS / 2) : 0;
+    float brakeDuty = 0.0f;
 
     if (regenCur < 0) {
       regenCur = 0;
@@ -326,11 +464,24 @@ void check_vbus() {
       }
     }
 
+
+
     if (brake_active) {
-      I_Bus = CLAMP(((((int32_t)regenCur * BRAKE_RESISTANCE * pwmPeriodCounts) /(supply_voltage_Vx10000))) ,0, (((uint32_t)pwmPeriodCounts*90)/100));
-      TIM16->CCR1 = I_Bus;
-    }else{
-     TIM16->CCR1 = I_Bus;
+      const float vbus_for_duty = (v_bus > 1.0f) ? v_bus : (float)supply_voltage_V;
+      brakeDuty = ((float)regenCur * (float)BRAKE_RESISTANCE) / (vbus_for_duty * 10000.0f);
+
+#if defined(BRAKE_VOLTAGE_RAMP_ENABLED)
+      if ((BRAKE_OVERVOLTAGE_RAMP_END_V > BRAKE_OVERVOLTAGE_RAMP_START_V) && (v_bus > BRAKE_OVERVOLTAGE_RAMP_START_V)) {
+        const float rampSpan = BRAKE_OVERVOLTAGE_RAMP_END_V - BRAKE_OVERVOLTAGE_RAMP_START_V;
+        brakeDuty += (v_bus - BRAKE_OVERVOLTAGE_RAMP_START_V) / rampSpan;
+      }
+#endif
+
+      brakeDuty = CLAMP(brakeDuty, 0.0f, 0.90f);
+      I_Bus = (int16_t)(brakeDuty * pwmPeriodCounts);
+      __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, I_Bus);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, 0);
     }
  }
 #endif
