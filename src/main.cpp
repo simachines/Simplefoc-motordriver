@@ -4,11 +4,12 @@
 #include "encoders/mt6835/MagneticSensorMT6835.h"
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 //#define BTS_BREAK
-//#define PWM_INPUT
+#define PWM_INPUT
 #define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
 #define VOLTAGE_SENSING
 #define BRAKE_VOLTAGE_RAMP_ENABLED
+#define CHECK_VBUS
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
 #endif
@@ -166,7 +167,11 @@ SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
 MagneticSensorMT6835 encoder2 = MagneticSensorMT6835((int)MT6835_SPI_CS, mt6835_spi_settings);
 Commander commander = Commander(Serial);
 void calc_hw_pwm();
+#if defined(CHECK_VBUS)
 void check_vbus();
+#else
+static inline void check_vbus() {}
+#endif
 #if defined(BRAKE_CONTROL_ENABLED)
  void brake_control(void);
  static bool configureBrakePwm(void);
@@ -510,7 +515,8 @@ void setup(){
   currentsense.gain_a *= -1;
   currentsense.gain_c *= -1;
   driver.voltage_power_supply = supply_voltage_V;  // Convert mV to V for driver
-  driver.voltage_limit = driver.voltage_power_supply*0.9;
+  driver.voltage_limit = driver.voltage_power_supply * 0.9f;
+  motor.voltage_limit = driver.voltage_power_supply * 0.5f;
   driver.pwm_frequency = PWM_FREQ;
   driver.enable_active_high = false;
    if (!driver.init()){
@@ -536,11 +542,6 @@ void setup(){
   #endif
   #endif
 
-  motor.linkSensor(&encoder); 
-  motor.linkDriver(&driver); 
-  motor.linkCurrentSense(&currentsense);
-  currentsense.linkDriver(&driver);
-
   #if defined(VOLTAGE_SENSING)
     v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
   	 while (vbus_adc2_ready && (v_bus < supply_voltage_V - 1.0f  || v_bus > supply_voltage_V + 1.0f)) {
@@ -557,13 +558,12 @@ void setup(){
   digitalWrite(FAULT_LED_PIN, HIGH);
   Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
    
-    int cs_init = currentsense.init();
-  Serial.printf("Current sense init status: %d\n", cs_init);
+    
   #if (monitoring_enabled)
   motor.useMonitoring(Serial); 
   #endif 
   //motor.controller = MotionControlType::torque;
-  motor.controller = MotionControlType::velocity_openloop;
+  motor.controller = MotionControlType::torque;
   motor.torque_controller = TorqueControlType::estimated_current;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
@@ -580,16 +580,21 @@ void setup(){
   motor.PID_current_q.output_ramp = 0;
   motor.LPF_current_q.Tf = 1/(_2PI*3.0f*current_bandwidth);
 
-  motor.voltage_limit = driver.voltage_power_supply * 0.58f;
+  
   //motor.motion_downsample = downsample;
   motor.current_limit = maxCurrent;
   motor.phase_resistance = phase_resistance;
   motor.voltage_sensor_align = alignStrength;
   motor.monitor_downsample = 100;
   motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_CURR_D;
-  
   motor.modulation_centered = 1;
- 
+  motor.linkSensor(&encoder); 
+  motor.linkDriver(&driver); 
+  motor.linkCurrentSense(&currentsense);
+  currentsense.linkDriver(&driver);
+  int cs_init = currentsense.init();
+  Serial.printf("Current sense init status: %d\n", cs_init);
+
   int m_init = motor.init();
   Serial.printf("Motor init status: %d\n", m_init);
 
@@ -604,15 +609,16 @@ void setup(){
 }
 
 void loop() {
-	 main_loop_counter++;
+	 //main_loop_counter++;
 	 motor.loopFOC();
      commander.run();
-  motor.move(target_current_to_amps(-target_current));
+     motor.move();
+  //motor.move(target_current_to_amps(-target_current));
      check_vbus();
-  const uint32_t now_us = get_systick_time_us();
-  if ((uint32_t)(now_us - t_control_us) >= CONTROL_LOOP_PERIOD_US) {
-    t_control_us += CONTROL_LOOP_PERIOD_US;
-    control_loop_counter++;
+  //const uint32_t now_us = get_systick_time_us();
+  //if ((uint32_t)(now_us - t_control_us) >= CONTROL_LOOP_PERIOD_US) {
+  //  t_control_us += CONTROL_LOOP_PERIOD_US;
+  //  control_loop_counter++;
     #if (monitoring_enabled)
     motor.monitor();
     #endif
@@ -629,8 +635,8 @@ void loop() {
   #endif
     
     
-    degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
-  }
+  //  degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+  //}
 
   //current_time = now_us / 1000u;
   // if ((current_time - t_pwm ) >= 200){
@@ -638,8 +644,8 @@ void loop() {
   //Serial.println("Hello world!");
   //motor.move(target_current);
   //}
-
-  if ((uint32_t)(now_us - speed_calc_last_us) >= 1000000u) {
+/*
+ if ((uint32_t)(now_us - speed_calc_last_us) >= 1000000u) {
     const uint32_t dt_us = now_us - speed_calc_last_us;
     const uint32_t main_delta = main_loop_counter - main_loop_counter_prev;
     const uint32_t control_delta = control_loop_counter - control_loop_counter_prev;
@@ -651,7 +657,7 @@ void loop() {
     control_loop_counter_prev = control_loop_counter;
     speed_calc_last_us = now_us;
   }
-
+*/
 }
 #if defined(PWM_INPUT)
 void calc_hw_pwm(void){
@@ -677,6 +683,7 @@ void calc_hw_pwm(void){
 }
 #endif
 
+#if defined(CHECK_VBUS)
 void check_vbus() {
 #if defined(VOLTAGE_SENSING)
   if (vbus_adc2_ready) {
@@ -693,7 +700,7 @@ b = motor.Ub;
 c = motor.Uc;
   driver.voltage_power_supply = v_bus;
   driver.voltage_limit = driver.voltage_power_supply*0.5;
-  motor.voltage_limit = driver.voltage_power_supply *0.58f;
+  motor.voltage_limit = driver.voltage_power_supply *0.5f;
   
   if (v_bus > 26.0f) {
     motor.target = 0;
@@ -710,6 +717,7 @@ c = motor.Uc;
   return v_error;
    */
 }
+#endif
 
 #if defined(BRAKE_CONTROL_ENABLED)
 
