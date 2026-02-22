@@ -4,9 +4,10 @@
 #include "encoders/mt6835/MagneticSensorMT6835.h"
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 //#define BTS_BREAK
-#define PWM_INPUT
+//#define PWM_INPUT
 #define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
+#define VOLTAGE_SENSING
 #define BRAKE_VOLTAGE_RAMP_ENABLED
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
@@ -85,7 +86,7 @@ float motor_KV = 6.25f;
 constexpr int pole_pairs = 6;
 constexpr int supply_voltage_V = 24;
 constexpr float ADC_REF_V = 3.0f;
-float maxCurrent = 3;
+float maxCurrent = 2;
 float alignStrength = 8;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
@@ -144,16 +145,18 @@ constexpr float VBUS_RESISTOR_BOTTOM_OHMS = 1000.0f;
 constexpr float v_bus_scale = (VBUS_RESISTOR_TOP_OHMS + VBUS_RESISTOR_BOTTOM_OHMS) / VBUS_RESISTOR_BOTTOM_OHMS; // divider ratio
 constexpr float ADC_MAX_COUNTS = 4095.0f;
 constexpr float VBUS_ADC_SCALE = ADC_REF_V / ADC_MAX_COUNTS;
+#if defined(VOLTAGE_SENSING)
 static ADC_HandleTypeDef hadc2 = {0};
 static DMA_HandleTypeDef hdma_adc2 = {0};
 static volatile uint32_t vbus_adc2_dma_raw = 0;
+#endif
 static bool vbus_adc2_ready = false;
 // Motor and driver objects
 SimpleFOCDebug debug;
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
 BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE);
 #if defined(STM32F4)
-LowsideCurrentSense currentsense = LowsideCurrentSense(0.035, 50.0f, currentPHA, currentPHB, currentPHC);
+LowsideCurrentSense currentsense = LowsideCurrentSense(0.035f, 50.0f, currentPHA, currentPHB, currentPHC);
 #elif defined(STM32G4)
 LowsideCurrentSense currentsense = LowsideCurrentSense(0.066f, currentPHA, currentPHB, currentPHC);
 #endif
@@ -168,9 +171,11 @@ void check_vbus();
  void brake_control(void);
  static bool configureBrakePwm(void);
 #endif
+#if defined(VOLTAGE_SENSING)
 static bool init_vbus_adc2_dma(void);
 static inline float vbus_from_dma_counts(void);
 static inline volatile uint32_t* vbus_adc2_dma_address(void);
+#endif
 static inline float target_current_to_amps(int16_t target);
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
 
@@ -190,6 +195,7 @@ static inline uint32_t get_systick_time_us() {
   return (ms_start * 1000u) + sub_ms_us;
 }
 
+#if defined(VOLTAGE_SENSING)
 static bool init_vbus_adc2_dma(void) {
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -317,6 +323,7 @@ static inline float vbus_from_dma_counts(void) {
 static inline volatile uint32_t* vbus_adc2_dma_address(void) {
   return &vbus_adc2_dma_raw;
 }
+#endif
 
 static inline float target_current_to_amps(int16_t target) {
   constexpr float TARGET_INPUT_MAX = 16000.0f;
@@ -483,12 +490,17 @@ void setup(){
     commander.add('B', setBandwidth, "Set current control bandwidth (Hz)");
     commander.add('M', onMotor, "my motor motion");
 	pinMode(FAULT_LED_PIN, OUTPUT);
+#if defined(VOLTAGE_SENSING)
   vbus_adc2_ready = init_vbus_adc2_dma();
   if (!vbus_adc2_ready) {
     Serial.println("VBUS ADC2 init failed");
   } else {
     Serial.printf("VBUS ADC2 DMA addr: 0x%08lX\n", (uint32_t)vbus_adc2_dma_address());
   }
+#else
+  vbus_adc2_ready = false;
+  v_bus = (float)supply_voltage_V;
+#endif
 
   #if defined(PWM_INPUT)
    if (pwmInput.initialize() != 0) {
@@ -529,9 +541,9 @@ void setup(){
   motor.linkCurrentSense(&currentsense);
   currentsense.linkDriver(&driver);
 
-  
-  v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
-	 while (v_bus < supply_voltage_V - 1.0f  || v_bus > supply_voltage_V + 1.0f) {
+  #if defined(VOLTAGE_SENSING)
+    v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
+  	 while (vbus_adc2_ready && (v_bus < supply_voltage_V - 1.0f  || v_bus > supply_voltage_V + 1.0f)) {
     digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
     delay(250); // Small delay to avoid busy-waiting
@@ -539,6 +551,9 @@ void setup(){
     delay(250);
     v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
   }
+  #else
+    v_bus = (float)supply_voltage_V;
+  #endif
   digitalWrite(FAULT_LED_PIN, HIGH);
   Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
    
@@ -663,15 +678,21 @@ void calc_hw_pwm(void){
 #endif
 
 void check_vbus() {
+#if defined(VOLTAGE_SENSING)
   if (vbus_adc2_ready) {
     v_bus = vbus_from_dma_counts();
   }
   else {
     return;
   }
-
+#else
+  v_bus = (float)supply_voltage_V;
+#endif
+a = motor.Ua;
+b = motor.Ub;
+c = motor.Uc;
   driver.voltage_power_supply = v_bus;
-  driver.voltage_limit = driver.voltage_power_supply*0.9;
+  driver.voltage_limit = driver.voltage_power_supply*0.5;
   motor.voltage_limit = driver.voltage_power_supply *0.58f;
   
   if (v_bus > 26.0f) {
