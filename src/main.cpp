@@ -563,7 +563,7 @@ void setup(){
   motor.useMonitoring(Serial); 
   #endif 
   //motor.controller = MotionControlType::torque;
-  motor.controller = MotionControlType::torque;
+  motor.controller = MotionControlType::velocity_openloop;
   motor.torque_controller = TorqueControlType::estimated_current;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
