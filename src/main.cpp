@@ -45,6 +45,7 @@ constexpr int pole_pairs = 15;
 constexpr int supply_voltage_V = 24;
 constexpr float ADC_REF_V = 3.3f;
 float phase_resistance = 0.3f; // Ohms
+float motor_KV = _NC;
 float maxCurrent = 10;
 float alignStrength = 4;
 #if defined(PWM_INPUT)
@@ -80,11 +81,12 @@ static void configureBtsBreak(void);
 #define MT6835_SPI_CS   PB12
 uint16_t BRAKE_RESISTANCE = 2 * 100;   // Ohms * 100
 float phase_resistance = 5.0f; // Ohms
+float motor_KV = 6.25f;
 constexpr int pole_pairs = 6;
 constexpr int supply_voltage_V = 24;
 constexpr float ADC_REF_V = 3.0f;
-float maxCurrent = 4;
-float alignStrength = 10;
+float maxCurrent = 3;
+float alignStrength = 8;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
@@ -100,7 +102,6 @@ STM32PWMInput pwmInput = STM32PWMInput(PE5);
 //Motor setup parameters
 float degrees = 0;
 float phase_inductance = 0.0003;
-float motor_KV = _NC;
 float current_bandwidth = 100; //hz
 float a, b, c;
 uint16_t pwmPeriodCounts = 0;
@@ -108,7 +109,7 @@ int supply_voltage_Vx10000 = supply_voltage_V * 10000;
 uint32_t period_ticks = 0;
 uint32_t duty_ticks = 0;
 uint16_t dutyPercent = 0;
-uint16_t target_current = 0;
+int16_t target_current = 0;
 int16_t I_Bus;
 bool brake_active;
 bool break_active;
@@ -170,6 +171,7 @@ void check_vbus();
 static bool init_vbus_adc2_dma(void);
 static inline float vbus_from_dma_counts(void);
 static inline volatile uint32_t* vbus_adc2_dma_address(void);
+static inline float target_current_to_amps(int16_t target);
 void onMotor(char* cmd){ commander.motor(&motor,cmd); }
 
 static inline uint32_t get_systick_time_us() {
@@ -316,6 +318,13 @@ static inline volatile uint32_t* vbus_adc2_dma_address(void) {
   return &vbus_adc2_dma_raw;
 }
 
+static inline float target_current_to_amps(int16_t target) {
+  constexpr float TARGET_INPUT_MAX = 16000.0f;
+  float normalized = static_cast<float>(target) / TARGET_INPUT_MAX;
+  normalized = CLAMP(normalized, -1.0f, 1.0f);
+  return normalized * maxCurrent;
+}
+
 void setBandwidth(char* cmd) {
   float new_bandwidth = current_bandwidth;  // Default to current value
   commander.scalar(&new_bandwidth, cmd);
@@ -441,6 +450,28 @@ static bool configureBrakePwm(void) {
 }
 #endif
 
+void motor_characterisation(void){
+void characteriseMotor(float alignStrength);
+  // Access phase resistance (already stored)
+float R = motor.phase_resistance;
+
+// Access inductance values (v2.4.0+)
+float L_d = motor.axis_inductance.d;  // D-axis inductance
+float L_q = motor.axis_inductance.q;  // Q-axis inductance
+
+Serial.print("Resistance: ");
+Serial.print(R);
+Serial.println(" Ohms");
+
+Serial.print("D-axis inductance: ");
+Serial.print(L_d * 1000);  // Convert H to mH
+Serial.println(" mH");
+
+Serial.print("Q-axis inductance: ");
+Serial.print(L_q * 1000);  // Convert H to mH
+Serial.println(" mH");
+}
+
 void setup(){
 
 	Serial.begin(921600);
@@ -518,7 +549,7 @@ void setup(){
   #endif 
   //motor.controller = MotionControlType::torque;
   motor.controller = MotionControlType::torque;
-  motor.torque_controller = TorqueControlType::foc_current;
+  motor.torque_controller = TorqueControlType::estimated_current;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 // Limits and parameters
@@ -546,20 +577,22 @@ void setup(){
  
   int m_init = motor.init();
   Serial.printf("Motor init status: %d\n", m_init);
+
   currentsense.skip_align = true; // before initFOC()
+
+  motor_characterisation();
+  motor_characterisation();
+  motor_characterisation();
 
   int foc_init = motor.initFOC();
   Serial.printf("FOC init status: %d\n", foc_init);
-  const uint32_t now_us = get_systick_time_us();
-  t_control_us = now_us;
-  speed_calc_last_us = now_us;
 }
 
 void loop() {
 	 main_loop_counter++;
 	 motor.loopFOC();
      commander.run();
-     motor.move();
+  motor.move(target_current_to_amps(-target_current));
      check_vbus();
   const uint32_t now_us = get_systick_time_us();
   if ((uint32_t)(now_us - t_control_us) >= CONTROL_LOOP_PERIOD_US) {
@@ -624,10 +657,9 @@ void calc_hw_pwm(void){
        
     }
     else {
-  duty_ticks = 0;
-  dutyPercent = 0;
   target_current = 0;
   }
+}
 #endif
 
 void check_vbus() {
