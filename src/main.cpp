@@ -115,7 +115,7 @@ bool break_active;
 bool simplefoc_init=true;
 bool simplefoc_init_finish=false;
 bool v_error = 0;
-u_int32_t current_time;
+uint32_t current_time;
 uint32_t t_debug = 0;
 uint32_t t_pwm = 0;
 uint16_t loop_dt = 0;
@@ -458,7 +458,7 @@ void setup(){
   } else {
     Serial.printf("VBUS ADC2 DMA addr: 0x%08lX\n", (uint32_t)vbus_adc2_dma_address());
   }
-	pwmInput.initialize();
+
   #if defined(PWM_INPUT)
    if (pwmInput.initialize() != 0) {
       Serial.println("PWM input init failed");
@@ -501,7 +501,6 @@ void setup(){
   
   v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
 	 while (v_bus < supply_voltage_V - 1.0f  || v_bus > supply_voltage_V + 1.0f) {
-    //while (v_bus > supply_voltage_V - 1.0f) {
     digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
     delay(250); // Small delay to avoid busy-waiting
@@ -624,8 +623,8 @@ void calc_hw_pwm(void){
         //pwmduty = duty_scaled - 16000u;             /* Center
        
     }
+    else {
   duty_ticks = 0;
-  period_ticks = 0;
   dutyPercent = 0;
   target_current = 0;
   }
