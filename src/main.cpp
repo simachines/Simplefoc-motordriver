@@ -32,6 +32,7 @@
 #define FAULT_LED_PIN LED_BUILTIN
 #define A_VBUS PA0
 #define currentPHA PA1
+#define currentPHB _NC
 #define currentPHC PA2
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
@@ -65,7 +66,8 @@ static void configureBtsBreak(void);
 #define BTS_OC_ACTIVE_LOW false
 #define FAULT_LED_PIN LED_BUILTIN
 #define A_VBUS PA1
-#define currentPHA PA2
+#define currentPHA _NC
+#define currentPHB PA2
 #define currentPHC PA3
 #define ENCODER_PIN_A PC6
 #define ENCODER_PIN_B PB5
@@ -76,7 +78,7 @@ static void configureBtsBreak(void);
 uint16_t BRAKE_RESISTANCE = 2 * 100;   // Ohms * 100
 float phase_resistance = 5.0f; // Ohms
 constexpr int pole_pairs = 6;
-constexpr int supply_voltage_V = 12;
+constexpr int supply_voltage_V = 24;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
@@ -99,7 +101,7 @@ float alignStrength = 4;
 float current_bandwidth = 100; //hz
 
 uint16_t pwmPeriodCounts = 0;
-uint16_t supply_voltage_Vx10000 = supply_voltage_V * 10000;
+int supply_voltage_Vx10000 = supply_voltage_V * 10000;
 uint32_t period_ticks = 0;
 uint32_t duty_ticks = 0;
 uint16_t dutyPercent = 0;
@@ -142,7 +144,11 @@ constexpr float VBUS_ADC_SCALE = ADC_REF_V * ADC_MAX_COUNTS;
 SimpleFOCDebug debug;
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
 BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE);
-LowsideCurrentSense current_sense = LowsideCurrentSense(66.0f, (int)currentPHA, _NC, (int)currentPHC);
+#if defined(STM32F4)
+LowsideCurrentSense current_sense = LowsideCurrentSense(0.035, 50.0f, currentPHA, currentPHB, currentPHC);
+#elif defined(STM32G4)
+LowsideCurrentSense current_sense = LowsideCurrentSense(66.0mV , currentPHA, currentPHB, currentPHC);
+#endif
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
 SPIClass SPI_3((int)MT6835_SPI_MOSI, (int)MT6835_SPI_MISO, (int)MT6835_SPI_SCK);
 SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
@@ -301,6 +307,7 @@ static bool configureBrakePwm(void) {
 void setup(){
 
 	Serial.begin(230400);
+  debug.enable();
   delay(3000);
 	#if defined(STM32G4)
     SimpleFOC_CORDIC_Config();      // initialize the CORDIC
@@ -315,8 +322,8 @@ void setup(){
       Serial.println("PWM input init failed");
     }
     #endif
-  current_sense.gain_a *= -1;
-  current_sense.gain_c *= -1;
+  //current_sense.gain_a *= -1;
+  //current_sense.gain_c *= -1;
   driver.voltage_power_supply = supply_voltage_V;  // Convert mV to V for driver
   driver.voltage_limit = driver.voltage_power_supply*0.9;
   driver.pwm_frequency = PWM_FREQ;
@@ -326,6 +333,8 @@ void setup(){
     Serial.printf("Driver init failed!\n");
     return;
   }
+   encoder.init();
+   Serial.printf("Encoder init status: %d\n", encoder.initialized);
   #if defined(BTS_BREAK)
   configureBtsBreak();
   #endif
@@ -346,23 +355,23 @@ void setup(){
   motor.linkDriver(&driver); 
   motor.linkCurrentSense(&current_sense);
   current_sense.linkDriver(&driver);
-  current_sense.init();
-  
+  int cs_init = current_sense.init();
+  Serial.printf("Current sense init status: %d\n", cs_init);
   v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
-	 //while (v_bus < 23  || v_bus > 25) {
-    while (v_bus < 23) {
+	 while (v_bus < supply_voltage_V - 1.0f  || v_bus > supply_voltage_V + 1.0f) {
+    //while (v_bus > supply_voltage_V - 1.0f) {
     digitalWrite(FAULT_LED_PIN, HIGH);
     Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
-    delay(500); // Small delay to avoid busy-waiting
+    delay(250); // Small delay to avoid busy-waiting
     digitalWrite(FAULT_LED_PIN, LOW);
-    delay(500);
+    delay(250);
     v_bus = analogRead(A_VBUS) * v_bus_scale / 100;
   }
   digitalWrite(FAULT_LED_PIN, HIGH);
   Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
   motor.useMonitoring(Serial);  
   //motor.controller = MotionControlType::torque;
-  motor.controller = MotionControlType::angle_openloop;
+  motor.controller = MotionControlType::torque;
   motor.torque_controller = TorqueControlType::voltage;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
@@ -385,7 +394,8 @@ void setup(){
   motor.phase_resistance = phase_resistance;
   motor.voltage_sensor_align = alignStrength;
   motor.monitor_downsample = 100;
-  motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_VOLT_Q | _MON_VEL | _MON_ANGLE;
+  motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_VOLT_Q | _MON_VEL | _MON_ANGLE | _MON_CURR_D;
+
   motor.modulation_centered = 1;
  
   int m_init = motor.init();
