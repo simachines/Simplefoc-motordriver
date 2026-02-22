@@ -547,7 +547,7 @@ void setup(){
  
   int m_init = motor.init();
   Serial.printf("Motor init status: %d\n", m_init);
-  //currentsense.skip_align = true; // before initFOC()
+  currentsense.skip_align = true; // before initFOC()
 
   int foc_init = motor.initFOC();
   Serial.printf("FOC init status: %d\n", foc_init);
@@ -639,16 +639,16 @@ void check_vbus() {
     return;
   }
 
-  //driver.voltage_power_supply = v_bus;
-  //driver.voltage_limit = driver.voltage_power_supply*0.9;
-  //motor.voltage_limit = driver.voltage_power_supply *0.58f;
-  /*
+  driver.voltage_power_supply = v_bus;
+  driver.voltage_limit = driver.voltage_power_supply*0.9;
+  motor.voltage_limit = driver.voltage_power_supply *0.58f;
+  
   if (v_bus > 26.0f) {
     motor.target = 0;
     motor.disable();
     v_error = 1;
     Serial.printf("Overvoltage: Motor off\n");
-  }
+  }/*
   if (v_bus < 20.0f) {
     motor.target = 0;
     motor.disable();
