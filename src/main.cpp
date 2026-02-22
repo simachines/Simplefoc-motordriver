@@ -83,7 +83,6 @@ constexpr int supply_voltage_V = 24;
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
 
-
 #endif
 
 
@@ -94,12 +93,13 @@ STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #define BRAKE_PWM_TEST_DUTY_PERCENT 25U
 
 //Motor setup parameters
+float degrees = 0;
 float phase_inductance = 0.0003;
 float motor_KV = _NC;
 float maxCurrent = 10;
 float alignStrength = 4;
 float current_bandwidth = 100; //hz
-
+float a, b, c;
 uint16_t pwmPeriodCounts = 0;
 int supply_voltage_Vx10000 = supply_voltage_V * 10000;
 uint32_t period_ticks = 0;
@@ -306,7 +306,7 @@ static bool configureBrakePwm(void) {
 
 void setup(){
 
-	Serial.begin(230400);
+	Serial.begin(921600);
   debug.enable();
   delay(3000);
 	#if defined(STM32G4)
@@ -372,7 +372,7 @@ void setup(){
   motor.useMonitoring(Serial);  
   //motor.controller = MotionControlType::torque;
   motor.controller = MotionControlType::torque;
-  motor.torque_controller = TorqueControlType::voltage;
+  motor.torque_controller = TorqueControlType::foc_current;
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 // Limits and parameters
@@ -394,12 +394,13 @@ void setup(){
   motor.phase_resistance = phase_resistance;
   motor.voltage_sensor_align = alignStrength;
   motor.monitor_downsample = 100;
-  motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_VOLT_Q | _MON_VEL | _MON_ANGLE | _MON_CURR_D;
-
+  motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_CURR_D;
+  
   motor.modulation_centered = 1;
  
   int m_init = motor.init();
   Serial.printf("Motor init status: %d\n", m_init);
+  //current_sense.skip_align = true; // before initFOC()
 
   int foc_init = motor.initFOC();
   Serial.printf("FOC init status: %d\n", foc_init);
@@ -413,12 +414,12 @@ void loop() {
 	 motor.loopFOC();
      commander.run();
      motor.move();
-
+     
   const uint32_t now_us = get_systick_time_us();
   if ((uint32_t)(now_us - t_control_us) >= CONTROL_LOOP_PERIOD_US) {
     t_control_us += CONTROL_LOOP_PERIOD_US;
     control_loop_counter++;
-
+    motor.monitor();
   #if defined(PWM_INPUT)
     calc_hw_pwm();
   #endif
@@ -431,8 +432,9 @@ void loop() {
     #endif
   #endif
     check_vbus();
+    
+    degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
   }
-  float degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
 
   //current_time = now_us / 1000u;
   // if ((current_time - t_pwm ) >= 200){
@@ -481,7 +483,10 @@ void calc_hw_pwm(void){
 #endif
 
 void check_vbus() {
-  v_bus = _readADCVoltageLowSide(A_VBUS,current_sense.params)*v_bus_scale;
+  //v_bus = _readADCVoltageLowSide(A_VBUS,current_sense.params)*v_bus_scale;
+    //a = _readADCVoltageLowSide(currentPHA,current_sense.params);
+   // b = _readADCVoltageLowSide(currentPHB,current_sense.params);
+   // c = _readADCVoltageLowSide(currentPHC,current_sense.params);
   //
   //driver.voltage_power_supply = v_bus;
   //driver.voltage_limit = driver.voltage_power_supply*0.9;
