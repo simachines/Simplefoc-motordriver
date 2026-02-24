@@ -152,10 +152,10 @@ void check_vbus() {
 
 #if defined(BRAKE_CONTROL_ENABLED)
 void brake_control(void) {
-  regenCur = -currentsense.getDCCurrent(motor.electrical_angle) * 100 - MAX_REGEN_CURRENT;
+  regenCur = -currentsense.getDCCurrent(motor.electrical_angle) * 100 - max_regen_current_x100;
   static float appliedBrakeDuty = 0.0f;
-  const int16_t brkOnThresh = BRKRESACT_SENS;
-  const int16_t brkOffThresh = (BRKRESACT_SENS > 1) ? (BRKRESACT_SENS / 2) : 0;
+  const int16_t brkOnThresh = brake_res_activation_sens_x100;
+  const int16_t brkOffThresh = (brake_res_activation_sens_x100 > 1) ? (brake_res_activation_sens_x100 / 2) : 0;
   float brakeDuty = 0.0f;
   constexpr float BRAKE_DUTY_RAMP_DOWN_STEP = 0.003f;
 
@@ -181,7 +181,7 @@ void brake_control(void) {
 
   if (brake_active) {
     const float vbus_for_duty = (v_bus > 1.0f) ? v_bus : (float)supply_voltage_V;
-    brakeDuty = ((float)regenCur * (float)BRAKE_RESISTANCE) / (vbus_for_duty * 10000.0f);
+    brakeDuty = ((float)regenCur * (float)brake_resistance_x100) / (vbus_for_duty * 10000.0f);
 
 #if defined(BRAKE_VOLTAGE_RAMP_ENABLED)
     if (v_bus > BRAKE_OVERVOLTAGE_RAMP_START_V) {

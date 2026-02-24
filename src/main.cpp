@@ -1,7 +1,7 @@
 #include "config.h"
 
 #if defined(STM32G4)
-uint16_t BRAKE_RESISTANCE = 5 * 100;
+uint16_t brake_resistance_x100 = 5 * 100;
 float phase_resistance = 0.3f;
 float motor_KV = _NC;
 float maxCurrent = 10;
@@ -12,11 +12,11 @@ STM32PWMInput pwmInput = STM32PWMInput(PA3);
 #endif
 
 #if defined(STM32F4)
-uint16_t BRAKE_RESISTANCE = 2 * 100;
+uint16_t brake_resistance_x100 = 2 * 100;
 float phase_resistance = 5.0f;
 float motor_KV = 6.25f;
-float maxCurrent = 2;
-float alignStrength = 5;
+float maxCurrent = 3;
+float alignStrength = 10;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
@@ -38,8 +38,8 @@ bool simplefoc_init = true;
 bool v_error = false;
 uint32_t current_time = 0;
 uint32_t t_pwm = 0;
-uint16_t MAX_REGEN_CURRENT = 0;
-uint16_t BRKRESACT_SENS = 1;
+uint16_t max_regen_current_x100 = 0;
+uint16_t brake_res_activation_sens_x100 = 1;
 int16_t regenCur = 0;
 float v_bus = 0.0f;
 bool vbus_adc2_ready = false;
@@ -159,7 +159,7 @@ void setup() {
 	Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
 
 	motor.controller = MotionControlType::torque;
-	motor.torque_controller = TorqueControlType::foc_current;
+	motor.torque_controller = TorqueControlType::estimated_current;
 	motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 	motor.PID_current_d.P = phase_inductance * current_bandwidth * _2PI;
@@ -197,6 +197,8 @@ void setup() {
 
 	int foc_init = motor.initFOC();
 	Serial.printf("FOC init status: %d\n", foc_init);
+
+	BLDC_Init();
 }
 
 void loop() {
@@ -232,17 +234,8 @@ void loop() {
 	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 	commander.run();
 	#endif
-}
-	motor.loopFOC();
+}   
 #if defined(PWM_INPUT)
     calc_hw_pwm();
-	if (pwm_input_control_enabled) {
-		//motor.move(target_current_to_amps(target_current));
-	} else {
-		motor.move();
-	}
-#else
-	motor.move();
 #endif
-
 }
