@@ -1,5 +1,5 @@
 [elf]
-file_path = .pio\build\genericSTM32F407VGT6\firmware.elf
+file_path = .pio\build\genericSTM32G431CB\firmware.elf
 relative_path = true
 
 [general]
@@ -9,13 +9,14 @@ version = 2
 sample_frequency_hz = 2000
 max_points = 10000
 max_viewport_points = 5000
+viewport_width_ms = 500.000000
 refresh_on_elf_change = true
 stop_acq_on_elf_change = true
 probe_type = 0
 target_name = 
 probe_mode = 0
 probe_speed_khz = 10000
-probe_sn = 066FFF303931594E43133158
+probe_sn = B55B5A1A00000000E9BDF301
 should_log = false
 log_directory = 
 gdb_command = ./gdb
@@ -30,6 +31,7 @@ core_frequency = 160000
 trace_prescaler = 10
 max_points = 10000
 max_viewport_points_percent = 10
+viewport_width_ms = 5.000000
 trigger_channel = -1
 trigger_level = 0.900000
 timeout = 2
@@ -56,7 +58,7 @@ do_not_interpret_as_enum = false
 [var1]
 name = a
 tracked_name = a
-address = 536878204
+address = 536877876
 type = 7
 color = 2503171095
 should_update_from_elf = true
@@ -69,7 +71,7 @@ do_not_interpret_as_enum = false
 [var2]
 name = b
 tracked_name = b
-address = 536878200
+address = 536877872
 type = 7
 color = 1702869246
 should_update_from_elf = true
@@ -95,7 +97,7 @@ do_not_interpret_as_enum = false
 [var4]
 name = c
 tracked_name = c
-address = 536878196
+address = 536877868
 type = 7
 color = 1374798534
 should_update_from_elf = true
@@ -108,7 +110,7 @@ do_not_interpret_as_enum = false
 [var5]
 name = degrees
 tracked_name = degrees
-address = 536878208
+address = 536877880
 type = 7
 color = 2578401674
 should_update_from_elf = true
@@ -121,7 +123,7 @@ do_not_interpret_as_enum = false
 [var6]
 name = duty_ticks
 tracked_name = duty_ticks
-address = 536878184
+address = 536877860
 type = 5
 color = 2375322900
 should_update_from_elf = true
@@ -134,7 +136,7 @@ do_not_interpret_as_enum = false
 [var7]
 name = estop_flag
 tracked_name = estop_flag
-address = 536877017
+address = 536876683
 type = 1
 color = 3626860362
 should_update_from_elf = true
@@ -147,7 +149,7 @@ do_not_interpret_as_enum = false
 [var8]
 name = motor.Ua
 tracked_name = motor.Ua
-address = 536878132
+address = 536877812
 type = 7
 color = 3971133874
 should_update_from_elf = true
@@ -160,7 +162,7 @@ do_not_interpret_as_enum = false
 [var9]
 name = motor.Ub
 tracked_name = motor.Ub
-address = 536878136
+address = 536877816
 type = 7
 color = 1764640958
 should_update_from_elf = true
@@ -173,7 +175,7 @@ do_not_interpret_as_enum = false
 [var10]
 name = motor.Uc
 tracked_name = motor.Uc
-address = 536878140
+address = 536877820
 type = 7
 color = 1241452215
 should_update_from_elf = true
@@ -186,7 +188,7 @@ do_not_interpret_as_enum = false
 [var11]
 name = period_ticks
 tracked_name = period_ticks
-address = 536878188
+address = 536877864
 type = 5
 color = 2336171880
 should_update_from_elf = true
@@ -199,7 +201,7 @@ do_not_interpret_as_enum = false
 [var12]
 name = pwm_input_control_enabled
 tracked_name = pwm_input_control_enabled
-address = 536878148
+address = 536877828
 type = 1
 color = 1120112811
 should_update_from_elf = true
@@ -212,7 +214,7 @@ do_not_interpret_as_enum = false
 [var13]
 name = target
 tracked_name = target
-address = 536878152
+address = 536877832
 type = 7
 color = 2579240151
 should_update_from_elf = true
@@ -225,7 +227,7 @@ do_not_interpret_as_enum = false
 [var14]
 name = target_current
 tracked_name = target_current
-address = 536878180
+address = 536877854
 type = 4
 color = 1605094003
 should_update_from_elf = true
@@ -238,7 +240,7 @@ do_not_interpret_as_enum = false
 [var15]
 name = v_bus
 tracked_name = v_bus
-address = 536878160
+address = 536877840
 type = 7
 color = 3318143788
 should_update_from_elf = true
@@ -251,7 +253,7 @@ do_not_interpret_as_enum = false
 [var16]
 name = v_error
 tracked_name = v_error
-address = 536878176
+address = 536877852
 type = 1
 color = 3148402499
 should_update_from_elf = true
