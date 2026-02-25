@@ -111,9 +111,7 @@ void calc_hw_pwm(void) {
     }
     dutyPercent = (duty_ticks * 32000u) / period_ticks;
     target_current = dutyPercent - 16000u;
-  } else {
-    target_current = 0;
-  }
+  } 
 }
 #endif
 
@@ -131,7 +129,6 @@ void check_vbus() {
   a = motor.Ua;
   b = motor.Ub;
   c = motor.Uc;
-  target = motor.target;
  // driver.voltage_power_supply = v_bus;
   //driver.voltage_limit = driver.voltage_power_supply * 0.9;
 

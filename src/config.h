@@ -51,7 +51,7 @@
 #define ESTOP_PORT GPIOC
 #define ESTOP_PIN GPIO_PIN_13
 #define ESTOP_GPIO_CLK_ENABLE() __HAL_RCC_GPIOC_CLK_ENABLE()
-#define ESTOP_ACTIVE_STATE GPIO_PIN_RESET
+#define ESTOP_ACTIVE_STATE GPIO_PIN_SET
 constexpr int pole_pairs = 15;
 constexpr int supply_voltage_V = 24;
 constexpr float ADC_REF_V = 3.3f;
@@ -61,8 +61,8 @@ constexpr float ADC_REF_V = 3.3f;
 #define BRAKE_RESISTOR PB14
 #define BTS_ENABLE_PIN PE8
 #define BTS_ENABLE BTS_ENABLE_PIN
-#define PH_B PE11
-#define PH_C PE13
+#define PH_B PE13
+#define PH_C PE11
 #define PH_A PE9
 #define BTS_OC PE15
 #define BTS_OC_GPIO_PORT GPIOE
@@ -83,11 +83,13 @@ constexpr float ADC_REF_V = 3.3f;
 #define ESTOP_PORT GPIOA
 #define ESTOP_PIN GPIO_PIN_0
 #define ESTOP_GPIO_CLK_ENABLE() __HAL_RCC_GPIOA_CLK_ENABLE()
-#define ESTOP_ACTIVE_STATE GPIO_PIN_RESET
+#define ESTOP_ACTIVE_STATE GPIO_PIN_SET
 constexpr int pole_pairs = 6;
 constexpr int supply_voltage_V = 24;
 constexpr float ADC_REF_V = 3.0f;
 #endif
+
+
 
 #define ENCODER_PPR 16384
 #define RAD_2_DEG 57.2957795131f
@@ -95,6 +97,23 @@ constexpr float ADC_REF_V = 3.0f;
 #define BRAKE_PWM_FREQ 20000
 #define BRAKE_PWM_TEST_DUTY_PERCENT 25U
 #define ESTOP_DEBOUNCE_MS 30U
+
+// ############################### EMERGENCY STOP INPUT ###############################
+// #define ESTOP_ENABLE                 // Enable discrete e-stop input on PA3 (shared with EXTBRK_USE_CH4). Comment out to disable.
+// #define ESTOP_BUTTON_NO              // Normally Open (active low). Press once to latch until the next press.
+// #define ESTOP_BUTTON_NC              // Normally Closed (active high). Do not define together with ESTOP_BUTTON_NO.
+// #define ESTOP_REQUIRE_HOLD           // Require the button to stay pressed for the estop to remain active.
+#ifdef ESTOP_ENABLE
+  #if defined(ESTOP_BUTTON_NO) && defined(ESTOP_BUTTON_NC)
+    #error "Define only one of ESTOP_BUTTON_NO or ESTOP_BUTTON_NC"
+  #endif
+  #if !defined(ESTOP_BUTTON_NO) && !defined(ESTOP_BUTTON_NC)
+    #define ESTOP_BUTTON_NO
+  #endif
+  #ifndef ESTOP_DEBOUNCE_MS
+    #define ESTOP_DEBOUNCE_MS   30U     // Debounce window (ms) for the estop input
+  #endif
+#endif
 
 constexpr uint32_t CONTROL_LOOP_PERIOD_US = 500;
 constexpr float VBUS_RESISTOR_TOP_OHMS = 10000.0f;

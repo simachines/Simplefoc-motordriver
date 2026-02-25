@@ -16,7 +16,7 @@ uint16_t BRAKE_RESISTANCE = 2 * 100;
 float phase_resistance = 5.0f;
 float motor_KV = 6.25f;
 float maxCurrent = 2;
-float alignStrength = 5;
+float alignStrength = 3.0f;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
@@ -44,8 +44,9 @@ int16_t regenCur = 0;
 float v_bus = 0.0f;
 bool vbus_adc2_ready = false;
 float target = 0.0f;
+bool estop_motor_disabled = false;
 #if defined(PWM_INPUT)
-bool pwm_input_control_enabled = true;
+bool pwm_input_control_enabled = false;
 #endif
 
 SimpleFOCDebug debug;
@@ -159,7 +160,7 @@ void setup() {
 	Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
 
 	motor.controller = MotionControlType::torque;
-	motor.torque_controller = TorqueControlType::foc_current;
+	motor.torque_controller = TorqueControlType::estimated_current;
 	motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 	motor.PID_current_d.P = phase_inductance * current_bandwidth * _2PI;
@@ -214,7 +215,6 @@ void loop() {
   #endif
   degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
 #if defined(ESTOP_ENABLE)
-	static bool estop_motor_disabled = false;
 	estop_update();
 	if (estop_active()) {
 		if (!estop_motor_disabled) {
@@ -237,7 +237,8 @@ void loop() {
 #if defined(PWM_INPUT)
     calc_hw_pwm();
 	if (pwm_input_control_enabled) {
-		//motor.move(target_current_to_amps(target_current));
+		target = target_current_to_amps(target_current);
+		motor.move(target);
 	} else {
 		motor.move();
 	}
