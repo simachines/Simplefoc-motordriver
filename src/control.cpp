@@ -234,7 +234,7 @@ void configureBtsBreak(void) {
   __HAL_RCC_GPIOB_CLK_ENABLE();
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   GPIO_InitStruct.Pin = BTS_OC_GPIO_PIN;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = BTS_OC_ACTIVE_LOW ? GPIO_PULLUP : GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   GPIO_InitStruct.Alternate = BTS_OC_AF;
@@ -242,11 +242,15 @@ void configureBtsBreak(void) {
 
   uint32_t bdtr = breakTimer->Instance->BDTR;
   bdtr |= TIM_BDTR_BKE;
+  bdtr |= TIM_BDTR_AOE;
   if (BTS_OC_ACTIVE_LOW) {
     bdtr |= TIM_BDTR_BKP;
   } else {
     bdtr &= ~TIM_BDTR_BKP;
   }
   breakTimer->Instance->BDTR = bdtr;
+
+  __HAL_TIM_CLEAR_FLAG(breakTimer, TIM_FLAG_BREAK);
+  __HAL_TIM_MOE_ENABLE(breakTimer);
 }
 #endif
