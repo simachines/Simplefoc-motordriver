@@ -1,4 +1,4 @@
-<img width="2743" height="1669" alt="simplefoc_driver" src="" />
+<img width="5620" height="3178" alt="simplefoc_driver" src="https://github.com/user-attachments/assets/3726a954-261f-422b-bdd0-3b68f52327fd" />
 
 ## Commander Commands
 
@@ -21,11 +21,7 @@ Serial Commander is enabled on `Serial` at `921600` baud.
 
 ### `E` - Set MT6835 ABZ resolution
 - Handler: `onSetABZResolution(char* cmd)`
-- Input: ABZ PPR in range `1..16384`
-- Mapping:
-	- `PPR=1` -> raw `0x0000`
-	- `PPR=16384` -> raw `0x3FFF`
-	- Internally: `raw = ppr - 1`
+- Input: E`1..16384` PPR(not CPR)
 - Behavior:
 	- Writes with `encoder2.setABZResolution(raw)`
 	- Reads back with `encoder2.getABZResolution()` and prints confirmation
@@ -39,5 +35,7 @@ Serial Commander is enabled on `Serial` at `921600` baud.
 	- `C0` disable PWM-input-driven current command
 	- `C`  query current state
 - Runtime effect:
-	- Enabled: loop uses `motor.move(target_current_to_amps(-target_current))`
+	- Enabled: loop uses `motor.move(target_current_to_amps(target_current))`
 	- Disabled: loop uses `motor.move()`
+
+[Simplefoc Commander](https://drive.google.com/file/d/1hYnQ6mngnNLS1kdi2suSRdR4zzsh0aGm/view?usp=sharing)
