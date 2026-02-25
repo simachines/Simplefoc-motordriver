@@ -58,9 +58,9 @@ LowsideCurrentSense currentsense = LowsideCurrentSense(0.035f, 50.0f, currentPHA
 LowsideCurrentSense currentsense = LowsideCurrentSense(0.066f, currentPHA, currentPHB, currentPHC);
 #endif
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
-SPIClass SPI_3((int)MT6835_SPI_MOSI, (int)MT6835_SPI_MISO, (int)MT6835_SPI_SCK);
+SPIClass SPI_3(MT6835_SPI_MOSI, MT6835_SPI_MISO, MT6835_SPI_SCK);
 SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
-MagneticSensorMT6835 encoder2 = MagneticSensorMT6835((int)MT6835_SPI_CS, mt6835_spi_settings);
+MagneticSensorMT6835 encoder2 = MagneticSensorMT6835(MT6835_SPI_CS, mt6835_spi_settings);
 #if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 Commander commander = Commander(Serial);
 #endif
@@ -74,20 +74,23 @@ void setup() {
 	Serial.begin(921600);
 	debug.enable();
 	delay(3000);
-#if defined(STM32G4)
+	Serial.println("Starting setup...");
+#if defined(HAL_CORDIC_MODULE_ENABLED)
 	SimpleFOC_CORDIC_Config();
 #endif
 
 	SPI_3.begin();
-	encoder2.init(&SPI_3);
+Serial.println("SPI_3.begin() complete...");
 
+	encoder2.init(&SPI_3);
+Serial.println("encoder2.init(&SPI_3) setup...");
 	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 	commander.add('B', setBandwidth, "Set current control bandwidth (Hz)");
 	commander.add('E', onSetABZResolution, nullptr);
 	commander.add('C', onPWMInputControl, nullptr);
 	commander.add('M', onMotor, "my motor motion");
 	#endif
-
+Serial.println("Step 2 setup...");
 	pinMode(FAULT_LED_PIN, OUTPUT);
     #if defined(ESTOP_ENABLE)
     estop_init();
@@ -99,7 +102,7 @@ void setup() {
 		delay(5);
 	}
 #endif
-
+Serial.println("Step 3 setup...");
 #if defined(VOLTAGE_SENSING)
 	vbus_adc2_ready = init_vbus_adc2_dma();
 	if (!vbus_adc2_ready) {
@@ -109,6 +112,7 @@ void setup() {
 	vbus_adc2_ready = false;
 	v_bus = (float)supply_voltage_V;
 #endif
+Serial.println("Step 4 setup...");
 
 #if defined(PWM_INPUT)
 	if (pwmInput.initialize() != 0) {
@@ -123,15 +127,18 @@ void setup() {
 	motor.voltage_limit = driver.voltage_limit * 0.5f;
 	driver.pwm_frequency = PWM_FREQ;
 	driver.enable_active_high = false;
+Serial.println("Step 6 setup...");
 
 	if (!driver.init()) {
 		simplefoc_init = false;
 		Serial.println("Driver init failed!");
 		return;
 	}
+Serial.println("Step 7 setup...");
 
 	encoder.init();
 	Serial.printf("Encoder init status: %d\n", encoder.initialized);
+Serial.println("Step 8 setup...");
 
 #if defined(BTS_BREAK)
 	configureBtsBreak();

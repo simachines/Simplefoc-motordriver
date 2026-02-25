@@ -8,10 +8,10 @@
 
 //#define BTS_BREAK
 #define PWM_INPUT
-#define BRAKE_CONTROL_ENABLED
+//#define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
 #define VOLTAGE_SENSING
-#define BRAKE_VOLTAGE_RAMP_ENABLED
+//#define BRAKE_VOLTAGE_RAMP_ENABLED
 #define CHECK_VBUS
 //#define ESTOP_REQUIRE_HOLD
 #define ESTOP_ENABLE
@@ -37,17 +37,17 @@
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
 #define BTS_OC_AF GPIO_AF6_TIM1
 #define BTS_OC_ACTIVE_LOW false
-#define FAULT_LED_PIN LED_BUILTIN
+#define FAULT_LED_PIN PC6
 #define A_VBUS PA0
 #define currentPHA PA1
 #define currentPHB _NC
 #define currentPHC PA2
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7
-#define MT6835_SPI_MOSI PB5
+#define MT6835_SPI_MOSI PB5_ALT1
 #define MT6835_SPI_MISO PC11
 #define MT6835_SPI_SCK  PC10
-#define MT6835_SPI_CS   PA15
+#define MT6835_SPI_CS   PA15_ALT1
 #define ESTOP_PORT GPIOC
 #define ESTOP_PIN GPIO_PIN_13
 #define ESTOP_GPIO_CLK_ENABLE() __HAL_RCC_GPIOC_CLK_ENABLE()
@@ -122,10 +122,10 @@ constexpr float v_bus_scale = (VBUS_RESISTOR_TOP_OHMS + VBUS_RESISTOR_BOTTOM_OHM
 constexpr float ADC_MAX_COUNTS = 4095.0f;
 constexpr float VBUS_ADC_SCALE = ADC_REF_V / ADC_MAX_COUNTS;
 
-#if defined(BRAKE_VOLTAGE_RAMP_ENABLED)
+
 constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = supply_voltage_V + 1.0f;
 constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 2.0f;
-#endif
+
 
 extern uint16_t BRAKE_RESISTANCE;
 extern float phase_resistance;
