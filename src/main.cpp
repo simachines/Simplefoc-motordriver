@@ -90,15 +90,12 @@ Serial.println("encoder2.init(&SPI_3) setup...");
 	commander.add('C', onPWMInputControl, nullptr);
 	commander.add('M', onMotor, "my motor motion");
 	#endif
-<<<<<<< HEAD
 #if defined(STM32G4)
 	pinMode(BTS_ENABLE, OUTPUT);
 	digitalWrite(BTS_ENABLE, estop_motor_disabled ? HIGH : LOW);
-=======
-Serial.println("Step 2 setup...");
->>>>>>> ae31cd1904132e03a2d2a11dbd133b1d620b1335
-	pinMode(FAULT_LED_PIN, OUTPUT);
 #endif
+	pinMode(FAULT_LED_PIN, OUTPUT);
+
     #if defined(ESTOP_ENABLE)
     estop_init();
 	estop_update();
