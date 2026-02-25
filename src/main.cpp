@@ -116,8 +116,8 @@ void setup() {
 	}
 #endif
 
-	currentsense.gain_a *= -1;
-	currentsense.gain_c *= -1;
+	//currentsense.gain_a *= -1;
+	//currentsense.gain_c *= -1;
 	driver.voltage_power_supply = supply_voltage_V;
 	driver.voltage_limit = driver.voltage_power_supply * 0.9f;
 	motor.voltage_limit = driver.voltage_limit * 0.5f;
@@ -160,7 +160,7 @@ void setup() {
 	Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
 
 	motor.controller = MotionControlType::torque;
-	motor.torque_controller = TorqueControlType::estimated_current;
+	motor.torque_controller = TorqueControlType::foc_current;
 	motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 	motor.PID_current_d.P = phase_inductance * current_bandwidth * _2PI;
@@ -193,7 +193,7 @@ void setup() {
 	int m_init = motor.init();
 	Serial.printf("Motor init status: %d\n", m_init);
 
-	currentsense.skip_align = true;
+	currentsense.skip_align = false;
 	motor_characterisation();
 
 	int foc_init = motor.initFOC();
