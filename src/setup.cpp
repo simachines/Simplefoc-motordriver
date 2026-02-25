@@ -282,7 +282,7 @@ void onMotor(char* cmd) {
 #endif
 
 void motor_characterisation(void) {
-  void characteriseMotor(float alignStrength);
+void characteriseMotor(float alignStrength);
   float R = motor.phase_resistance;
   float L_d = motor.axis_inductance.d;
   float L_q = motor.axis_inductance.q;
