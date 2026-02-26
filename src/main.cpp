@@ -7,7 +7,7 @@ float motor_KV = _NC;
 float maxCurrent = 10;
 float alignStrength = 4;
 #if defined(PWM_INPUT)
-STM32PWMInput pwmInput = STM32PWMInput(PA3);
+STM32PWMInput pwmInput = STM32PWMInput(PB15);
 #endif
 #endif
 

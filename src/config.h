@@ -27,7 +27,7 @@
 
 #if defined(STM32G4)
 #define BRAKE_RESISTOR PB4
-#define BTS_ENABLE_PIN PA11
+#define BTS_ENABLE_PIN PC4
 #define BTS_ENABLE BTS_ENABLE_PIN
 #define PH_B PA9
 #define PH_C PA8
