@@ -190,6 +190,8 @@ bool configureBrakePwm(void);
 #if defined(BTS_BREAK)
 void configureBtsBreak(void);
 #endif
+void bts_oc_input_init(void);
+void bts_oc_input_update(void);
 
 bool init_vbus_adc2_dma(void);
 float vbus_from_dma_counts(void);

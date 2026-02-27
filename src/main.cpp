@@ -143,6 +143,8 @@ Serial.println("Step 8 setup...");
 
 #if defined(BTS_BREAK)
 	configureBtsBreak();
+#else
+	bts_oc_input_init();
 #endif
 #if defined(BRAKE_CONTROL_ENABLED)
 	if (!configureBrakePwm()) {
@@ -237,6 +239,7 @@ void loop() {
 	}
     }
 #endif
+	bts_oc_input_update();
 	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 	commander.run();
 	#endif
