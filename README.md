@@ -1,4 +1,5 @@
-<img width="5620" height="3178" alt="simplefoc_driver" src="https://github.com/user-attachments/assets/3726a954-261f-422b-bdd0-3b68f52327fd" />
+
+<img width="1909" height="1078" alt="sfocdriver" src="https://github.com/user-attachments/assets/d0afb72d-65e4-4a5a-be3b-e08eb2034131" />
 
 ## Commander Commands
 
