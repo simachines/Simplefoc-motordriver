@@ -253,7 +253,7 @@ void configureBtsBreak(void) {
   __HAL_TIM_CLEAR_FLAG(breakTimer, TIM_FLAG_BREAK);
   __HAL_TIM_MOE_ENABLE(breakTimer);
 }
-#else
+#elif defined(BTS_OC_MONITOR)
 static bool btsOcMonitorInitialized = false;
 static bool btsOcReportedActive = false;
 

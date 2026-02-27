@@ -143,7 +143,7 @@ Serial.println("Step 8 setup...");
 
 #if defined(BTS_BREAK)
 	configureBtsBreak();
-#else
+#elif defined(BTS_OC_MONITOR)
 	bts_oc_input_init();
 #endif
 #if defined(BRAKE_CONTROL_ENABLED)
@@ -239,7 +239,9 @@ void loop() {
 	}
     }
 #endif
+	#if defined(BTS_OC_MONITOR)
 	bts_oc_input_update();
+	#endif
 	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 	commander.run();
 	#endif

@@ -7,6 +7,7 @@
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 
 //#define BTS_BREAK
+//#define BTS_OC_MONITOR
 #define PWM_INPUT
 //#define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
@@ -190,8 +191,10 @@ bool configureBrakePwm(void);
 #if defined(BTS_BREAK)
 void configureBtsBreak(void);
 #endif
+#if defined(BTS_OC_MONITOR)
 void bts_oc_input_init(void);
 void bts_oc_input_update(void);
+#endif
 
 bool init_vbus_adc2_dma(void);
 float vbus_from_dma_counts(void);
