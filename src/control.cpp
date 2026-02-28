@@ -252,4 +252,76 @@ void configureBtsBreak(void) {
   __HAL_TIM_CLEAR_FLAG(breakTimer, TIM_FLAG_BREAK);
   __HAL_TIM_MOE_ENABLE(breakTimer);
 }
+#elif defined(BTS_OC_MONITOR)
+static bool btsOcMonitorInitialized = false;
+static bool btsOcReportedActive = false;
+
+static void enableBtsOcGpioClock(void) {
+#if defined(__HAL_RCC_GPIOA_CLK_ENABLE)
+  if (BTS_OC_GPIO_PORT == GPIOA) {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(__HAL_RCC_GPIOB_CLK_ENABLE)
+  if (BTS_OC_GPIO_PORT == GPIOB) {
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(__HAL_RCC_GPIOC_CLK_ENABLE)
+  if (BTS_OC_GPIO_PORT == GPIOC) {
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(__HAL_RCC_GPIOD_CLK_ENABLE)
+  if (BTS_OC_GPIO_PORT == GPIOD) {
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(__HAL_RCC_GPIOE_CLK_ENABLE)
+  if (BTS_OC_GPIO_PORT == GPIOE) {
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    return;
+  }
+#endif
+}
+
+void bts_oc_input_init(void) {
+  enableBtsOcGpioClock();
+
+  GPIO_InitTypeDef gpio = {0};
+  gpio.Pin = BTS_OC_GPIO_PIN;
+  gpio.Mode = GPIO_MODE_INPUT;
+  gpio.Pull = BTS_OC_ACTIVE_LOW ? GPIO_PULLUP : GPIO_PULLDOWN;
+  HAL_GPIO_Init(BTS_OC_GPIO_PORT, &gpio);
+
+  btsOcMonitorInitialized = true;
+  const bool activeNow = (HAL_GPIO_ReadPin(BTS_OC_GPIO_PORT, BTS_OC_GPIO_PIN) == (BTS_OC_ACTIVE_LOW ? GPIO_PIN_RESET : GPIO_PIN_SET));
+  btsOcReportedActive = activeNow;
+  if (activeNow) {
+    Serial.println("BTS overcurrent active");
+  }
+}
+
+void bts_oc_input_update(void) {
+  if (!btsOcMonitorInitialized) {
+    return;
+  }
+
+  const bool active = (HAL_GPIO_ReadPin(BTS_OC_GPIO_PORT, BTS_OC_GPIO_PIN) == (BTS_OC_ACTIVE_LOW ? GPIO_PIN_RESET : GPIO_PIN_SET));
+  if (active && !btsOcReportedActive) {
+    Serial.println("BTS overcurrent active");
+    btsOcReportedActive = true;
+  } else if (!active && btsOcReportedActive) {
+    Serial.println("BTS overcurrent cleared");
+    btsOcReportedActive = false;
+  }
+}
+#endif
+
+#if !defined(BTS_BREAK)
+void configureBtsBreak(void) {}
 #endif
