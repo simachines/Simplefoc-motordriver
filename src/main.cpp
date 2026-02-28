@@ -7,7 +7,7 @@ float motor_KV = _NC;
 float maxCurrent = 10;
 float alignStrength = 4;
 #if defined(PWM_INPUT)
-STM32PWMInput pwmInput = STM32PWMInput(PB15);
+STM32PWMInput pwmInput = STM32PWMInput(PB_15_ALT2);
 #endif
 #endif
 
@@ -51,7 +51,7 @@ bool pwm_input_control_enabled = false;
 
 SimpleFOCDebug debug;
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
-BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE);
+BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE_PIN);
 #if defined(STM32F4)
 LowsideCurrentSense currentsense = LowsideCurrentSense(0.035f, 50.0f, currentPHA, currentPHB, currentPHC);
 #elif defined(STM32G4)
