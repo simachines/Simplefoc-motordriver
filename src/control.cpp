@@ -132,13 +132,12 @@ void check_vbus() {
  // driver.voltage_power_supply = v_bus;
   //driver.voltage_limit = driver.voltage_power_supply * 0.9;
 
-  if (v_bus > BRAKE_OVERVOLTAGE_RAMP_END_V) {
+  if ((v_bus > BRAKE_OVERVOLTAGE_RAMP_END_V) ) {
     motor.target = 0;
     motor.disable();
-    v_error = 1;
-     Serial.println("Overvoltage: Motor off");
+    Serial.println("Overvoltage: Motor off");
   }
-  if (v_bus < 12.0f) {
+  if ((v_bus < 12.0f) && !v_error) {
     motor.target = 0;
     motor.disable();
     v_error = 1;

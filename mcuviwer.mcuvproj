@@ -58,7 +58,7 @@ do_not_interpret_as_enum = false
 [var1]
 name = a
 tracked_name = a
-address = 536877876
+address = 536877856
 type = 7
 color = 2503171095
 should_update_from_elf = true
@@ -71,7 +71,7 @@ do_not_interpret_as_enum = false
 [var2]
 name = b
 tracked_name = b
-address = 536877872
+address = 536877852
 type = 7
 color = 1702869246
 should_update_from_elf = true
@@ -97,7 +97,7 @@ do_not_interpret_as_enum = false
 [var4]
 name = c
 tracked_name = c
-address = 536877868
+address = 536877848
 type = 7
 color = 1374798534
 should_update_from_elf = true
@@ -110,7 +110,7 @@ do_not_interpret_as_enum = false
 [var5]
 name = degrees
 tracked_name = degrees
-address = 536877880
+address = 536877860
 type = 7
 color = 2578401674
 should_update_from_elf = true
@@ -240,7 +240,7 @@ do_not_interpret_as_enum = false
 [var15]
 name = v_bus
 tracked_name = v_bus
-address = 536877840
+address = 536877832
 type = 7
 color = 3318143788
 should_update_from_elf = true
@@ -253,7 +253,7 @@ do_not_interpret_as_enum = false
 [var16]
 name = v_error
 tracked_name = v_error
-address = 536877852
+address = 536877844
 type = 1
 color = 3148402499
 should_update_from_elf = true

@@ -6,8 +6,8 @@
 #include "encoders/mt6835/MagneticSensorMT6835.h"
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 
-//#define BTS_BREAK
-#define PWM_INPUT
+#define BTS_BREAK
+//#define PWM_INPUT
 //#define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
 #define VOLTAGE_SENSING
@@ -26,7 +26,6 @@
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 #if defined(STM32G4)
-#define BRAKE_RESISTOR PB4
 #define BTS_ENABLE_PIN PC4
 #define BTS_ENABLE BTS_ENABLE_PIN
 #define PH_B PA9
@@ -43,7 +42,7 @@
 #define currentPHB _NC
 #define currentPHC PA2
 #define ENCODER_PIN_A PB6
-#define ENCODER_PIN_B PB7
+#define ENCODER_PIN_B PB7_ALT1
 #define MT6835_SPI_MOSI PB5_ALT1
 #define MT6835_SPI_MISO PC11
 #define MT6835_SPI_SCK  PC10
