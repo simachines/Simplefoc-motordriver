@@ -58,9 +58,9 @@ do_not_interpret_as_enum = false
 [var1]
 name = a
 tracked_name = a
-address = 536877880
+address = 536877884
 type = 7
-color = 2503171095
+color = 2499870715
 should_update_from_elf = true
 shift = 0
 mask = 4294967295
@@ -71,9 +71,9 @@ do_not_interpret_as_enum = false
 [var2]
 name = b
 tracked_name = b
-address = 536877876
+address = 536877880
 type = 7
-color = 1702869246
+color = 1695350528
 should_update_from_elf = true
 shift = 0
 mask = 4294967295
@@ -97,7 +97,7 @@ do_not_interpret_as_enum = false
 [var4]
 name = btsOcMonitorInitialized
 tracked_name = btsOcMonitorInitialized
-address = 536876683
+address = 536876687
 type = 1
 color = 3292149050
 should_update_from_elf = true
@@ -110,7 +110,7 @@ do_not_interpret_as_enum = false
 [var5]
 name = btsOcReportedActive
 tracked_name = btsOcReportedActive
-address = 536876682
+address = 536876686
 type = 1
 color = 4214765760
 should_update_from_elf = true
@@ -123,9 +123,9 @@ do_not_interpret_as_enum = false
 [var6]
 name = c
 tracked_name = c
-address = 536877872
+address = 536877876
 type = 7
-color = 1374798534
+color = 1375666197
 should_update_from_elf = true
 shift = 0
 mask = 4294967295
@@ -136,7 +136,7 @@ do_not_interpret_as_enum = false
 [var7]
 name = degrees
 tracked_name = degrees
-address = 536877884
+address = 536877892
 type = 7
 color = 2578401674
 should_update_from_elf = true
@@ -149,7 +149,7 @@ do_not_interpret_as_enum = false
 [var8]
 name = duty_ticks
 tracked_name = duty_ticks
-address = 536877864
+address = 536877868
 type = 5
 color = 2375322900
 should_update_from_elf = true
@@ -162,7 +162,7 @@ do_not_interpret_as_enum = false
 [var9]
 name = estop_flag
 tracked_name = estop_flag
-address = 536876685
+address = 536876689
 type = 1
 color = 3626860362
 should_update_from_elf = true
@@ -175,7 +175,7 @@ do_not_interpret_as_enum = false
 [var10]
 name = motor.Ua
 tracked_name = motor.Ua
-address = 536877816
+address = 536877820
 type = 7
 color = 3971133874
 should_update_from_elf = true
@@ -188,7 +188,7 @@ do_not_interpret_as_enum = false
 [var11]
 name = motor.Ub
 tracked_name = motor.Ub
-address = 536877820
+address = 536877824
 type = 7
 color = 1764640958
 should_update_from_elf = true
@@ -201,7 +201,7 @@ do_not_interpret_as_enum = false
 [var12]
 name = motor.Uc
 tracked_name = motor.Uc
-address = 536877824
+address = 536877828
 type = 7
 color = 1241452215
 should_update_from_elf = true
@@ -214,7 +214,7 @@ do_not_interpret_as_enum = false
 [var13]
 name = period_ticks
 tracked_name = period_ticks
-address = 536877868
+address = 536877872
 type = 5
 color = 2336171880
 should_update_from_elf = true
@@ -227,7 +227,7 @@ do_not_interpret_as_enum = false
 [var14]
 name = pwm_input_control_enabled
 tracked_name = pwm_input_control_enabled
-address = 536877832
+address = 536877836
 type = 1
 color = 1120112811
 should_update_from_elf = true
@@ -240,7 +240,7 @@ do_not_interpret_as_enum = false
 [var15]
 name = target
 tracked_name = target
-address = 536877836
+address = 536877840
 type = 7
 color = 2579240151
 should_update_from_elf = true
@@ -253,7 +253,7 @@ do_not_interpret_as_enum = false
 [var16]
 name = target_current
 tracked_name = target_current
-address = 536877858
+address = 536877862
 type = 4
 color = 1605094003
 should_update_from_elf = true
@@ -266,7 +266,7 @@ do_not_interpret_as_enum = false
 [var17]
 name = v_bus
 tracked_name = v_bus
-address = 536877844
+address = 536877848
 type = 7
 color = 3318143788
 should_update_from_elf = true
@@ -279,7 +279,7 @@ do_not_interpret_as_enum = false
 [var18]
 name = v_error
 tracked_name = v_error
-address = 536877856
+address = 536877860
 type = 1
 color = 3148402499
 should_update_from_elf = true

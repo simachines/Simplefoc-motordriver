@@ -2,10 +2,12 @@
 
 #if defined(STM32G4)
 uint16_t BRAKE_RESISTANCE = 5 * 100;
-float phase_resistance = 0.3f;
+float phase_resistance = 0.9f;
+float L_d = 1.16;
+float L_q = 1.31;
 float motor_KV = 12.5f;
-float maxCurrent = 2.0f;
-float alignStrength = 3.0f;
+float maxCurrent = 4.0f;
+float alignStrength = 2.0f;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PB_15_ALT2);
 #endif
@@ -23,7 +25,7 @@ STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
 
 float degrees = 0;
-float phase_inductance = 0.0003f;
+float phase_inductance = L_q;
 float current_bandwidth = 100.0f;
 float a = 0.0f, b = 0.0f, c = 0.0f;
 uint16_t pwmPeriodCounts = 0;
@@ -51,11 +53,11 @@ bool pwm_input_control_enabled = false;
 
 SimpleFOCDebug debug;
 BLDCMotor motor = BLDCMotor(pole_pairs, phase_resistance, motor_KV, phase_inductance);
-BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE);
+BLDCDriver3PWM driver = BLDCDriver3PWM((int)PH_A, (int)PH_B, (int)PH_C, (int)BTS_ENABLE_PIN);
 #if defined(STM32F4)
 LowsideCurrentSense currentsense = LowsideCurrentSense(0.035f, 50.0f, currentPHA, currentPHB, currentPHC);
 #elif defined(STM32G4)
-LowsideCurrentSense currentsense = LowsideCurrentSense(0.066f, currentPHA, currentPHB, currentPHC);
+LowsideCurrentSense currentsense = LowsideCurrentSense(66.0f, currentPHA, currentPHB, currentPHC);
 #endif
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
 SPIClass SPI_3(MT6835_SPI_MOSI, MT6835_SPI_MISO, MT6835_SPI_SCK);
@@ -121,13 +123,13 @@ Serial.println("Step 4 setup...");
 	}
 #endif
 
-	//currentsense.gain_a *= -1;
-	//currentsense.gain_c *= -1;
+	currentsense.gain_a *= -1;
+	currentsense.gain_c *= -1;
 	driver.voltage_power_supply = supply_voltage_V;
 	driver.voltage_limit = driver.voltage_power_supply * 0.9f;
 	motor.voltage_limit = driver.voltage_limit * 0.5f;
 	driver.pwm_frequency = PWM_FREQ;
-	driver.enable_active_high = false;
+	driver.enable_active_high = true;
 Serial.println("Step 6 setup...");
 
 	if (!driver.init()) {
@@ -170,8 +172,11 @@ Serial.println("Step 8 setup...");
 	Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
 
 	motor.controller = MotionControlType::torque;
-	motor.torque_controller = TorqueControlType::foc_current;
+	motor.torque_controller = TorqueControlType::estimated_current;
 	motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+
+    motor.axis_inductance.d = L_d;
+    motor.axis_inductance.q = L_q;
 
 	motor.PID_current_d.P = phase_inductance * current_bandwidth * _2PI;
 	motor.PID_current_d.I = motor.PID_current_d.P * phase_resistance / phase_inductance;
@@ -203,8 +208,14 @@ Serial.println("Step 8 setup...");
 	int m_init = motor.init();
 	Serial.printf("Motor init status: %d\n", m_init);
 
-	currentsense.skip_align = false;
+	currentsense.skip_align = true;
+   
+	#if defined(MOTOR_CHAR)
+	Serial.println("Hold The Wheel");
+	delay(3000);
 	motor_characterisation();
+	delay(4000);
+	#endif
 
 	int foc_init = motor.initFOC();
 	Serial.printf("FOC init status: %d\n", foc_init);

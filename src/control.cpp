@@ -304,7 +304,7 @@ void bts_oc_input_init(void) {
   if (activeNow) {
     Serial.println("BTS overcurrent active");
   }
-}
+} 
 
 void bts_oc_input_update(void) {
   if (!btsOcMonitorInitialized) {

@@ -16,6 +16,7 @@
 #define CHECK_VBUS
 //#define ESTOP_REQUIRE_HOLD
 #define ESTOP_ENABLE
+//#define MOTOR_CHAR
 
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
@@ -39,9 +40,9 @@
 #define BTS_OC_ACTIVE_LOW false
 #define FAULT_LED_PIN PC6
 #define A_VBUS PA0
-#define currentPHA PA1
+#define currentPHA PA2
 #define currentPHB _NC
-#define currentPHC PA2
+#define currentPHC PA1
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7_ALT1
 #define MT6835_SPI_MOSI PB5_ALT1
@@ -53,8 +54,8 @@
 #define ESTOP_GPIO_CLK_ENABLE() __HAL_RCC_GPIOC_CLK_ENABLE()
 #define ESTOP_ACTIVE_STATE GPIO_PIN_SET
 constexpr int pole_pairs = 15;
-constexpr int supply_voltage_V = 24;
-constexpr float ADC_REF_V = 3.5f;
+constexpr int supply_voltage_V = 25;
+constexpr float ADC_REF_V = 3.30f;
 #endif
 
 #if defined(STM32F4)
@@ -91,7 +92,7 @@ constexpr float ADC_REF_V = 3.0f;
 
 
 
-#define ENCODER_PPR 16384
+#define ENCODER_PPR 2048
 #define RAD_2_DEG 57.2957795131f
 #define PWM_FREQ 16000
 #define BRAKE_PWM_FREQ 20000
@@ -124,7 +125,7 @@ constexpr float VBUS_ADC_SCALE = ADC_REF_V / ADC_MAX_COUNTS;
 
 
 constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = supply_voltage_V + 1.0f;
-constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 2.0f;
+constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 3.0f;
 
 
 extern uint16_t BRAKE_RESISTANCE;
