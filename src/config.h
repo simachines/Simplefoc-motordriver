@@ -7,7 +7,7 @@
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 
 //#define BTS_BREAK
-#define BTS_OC_MONITOR
+//#define BTS_OC_MONITOR
 #define PWM_INPUT
 //#define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE
@@ -125,7 +125,7 @@ constexpr float VBUS_ADC_SCALE = ADC_REF_V / ADC_MAX_COUNTS;
 
 
 constexpr float BRAKE_OVERVOLTAGE_RAMP_START_V = supply_voltage_V + 1.0f;
-constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 3.0f;
+constexpr float BRAKE_OVERVOLTAGE_RAMP_END_V = supply_voltage_V + 4.0f;
 
 
 extern uint16_t BRAKE_RESISTANCE;

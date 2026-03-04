@@ -6,8 +6,8 @@ float phase_resistance = 0.9f;
 float L_d = 1.16;
 float L_q = 1.31;
 float motor_KV = 12.5f;
-float maxCurrent = 4.0f;
-float alignStrength = 2.0f;
+float maxCurrent = 5.0f;
+float alignStrength = 4.0f;
 #if defined(PWM_INPUT)
 STM32PWMInput pwmInput = STM32PWMInput(PB_15_ALT2);
 #endif
@@ -156,7 +156,7 @@ Serial.println("Step 8 setup...");
 
 #if defined(VOLTAGE_SENSING)
 	v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
-	while (vbus_adc2_ready && (v_bus < supply_voltage_V - 1.0f || v_bus > supply_voltage_V + 1.0f)) {
+	while (vbus_adc2_ready && (v_bus < supply_voltage_V - 10.0f || v_bus > supply_voltage_V + 1.0f)) {
 		digitalWrite(FAULT_LED_PIN, HIGH);
 		Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
 		delay(250);
@@ -261,7 +261,7 @@ void loop() {
 #if defined(PWM_INPUT)
     calc_hw_pwm();
 	if (pwm_input_control_enabled) {
-		target = target_current_to_amps(target_current);
+		target = -target_current_to_amps(target_current);
 		motor.move(target);
 	} else {
 		motor.move();
