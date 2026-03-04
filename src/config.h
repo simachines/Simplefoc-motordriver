@@ -7,7 +7,7 @@
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 
 //#define BTS_BREAK
-#define BTS_OC_MONITOR
+//#define BTS_OC_MONITOR
 #define PWM_INPUT
 //#define BRAKE_CONTROL_ENABLED
 //#define BRAKE_PWM_TEST_MODE

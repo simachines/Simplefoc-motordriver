@@ -23,7 +23,7 @@ float alignStrength = 3.0f;
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
 #endif
-
+float electrical_degrees = 0.0f;
 float degrees = 0;
 float phase_inductance = L_q;
 float current_bandwidth = 100.0f;
@@ -234,6 +234,7 @@ void loop() {
     brake_control();
     #endif
   #endif
+  electrical_degrees = motor.electricalAngle();
   degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
 #if defined(ESTOP_ENABLE)
 	estop_update();
