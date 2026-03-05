@@ -1,5 +1,309 @@
 #include "config.h"
 
+#include <math.h>
+
+bool wait_for_yes_no(const char* prompt, uint32_t timeout_ms) {
+  Serial.print(prompt);
+  Serial.print(" [y/n]: ");
+  const uint32_t start = HAL_GetTick();
+  while (true) {
+    if (Serial.available() > 0) {
+      const char c = static_cast<char>(Serial.read());
+      if (c == 'y' || c == 'Y' || c == '1') {
+        Serial.println("y");
+        return true;
+      }
+      if (c == 'n' || c == 'N' || c == '0') {
+        Serial.println("n");
+        return false;
+      }
+    }
+    if (timeout_ms > 0U && (HAL_GetTick() - start) >= timeout_ms) {
+      Serial.println("(timeout)");
+      return false;
+    }
+    delay(10);
+  }
+}
+
+uint8_t mt6835_cal_state(void) {
+  const uint8_t raw = encoder2.getCalibrationStatus();
+  return (raw >> 6) & 0x03u;
+}
+
+float mt6835_target_rpm_from_freq(uint8_t freq) {
+  static const float midpoints[8] = {
+    4800.0f, // 3200-6400
+    2400.0f, // 1600-3200
+    1200.0f, // 800-1600
+    600.0f,  // 400-800 (factory default)
+    300.0f,  // 200-400
+    150.0f,  // 100-200
+    75.0f,   // 50-100
+    37.5f    // 25-50
+  };
+  const uint8_t idx = (freq < 8U) ? freq : 3U;
+  return midpoints[idx];
+}
+
+uint8_t mt6835_autocal_freq_from_rpm(float rpm) {
+  if (rpm >= 3200.0f) return 0u;
+  if (rpm >= 1600.0f) return 1u;
+  if (rpm >= 800.0f)  return 2u;
+  if (rpm >= 400.0f)  return 3u;
+  if (rpm >= 200.0f)  return 4u;
+  if (rpm >= 100.0f)  return 5u;
+  if (rpm >= 50.0f)   return 6u;
+  return 7u;
+}
+
+float mt6835_min_rotations_from_freq(uint8_t freq) {
+  (void)freq;
+  return 64.0f; // datasheet guidance (>=64 rotations)
+}
+
+void ramp_velocity(BLDCMotor& m, float start_vel, float end_vel, uint32_t duration_ms) {
+  const uint32_t start = HAL_GetTick();
+  if (duration_ms == 0U) {
+    m.target = end_vel;
+    m.loopFOC();
+    m.move();
+    return;
+  }
+
+  while (true) {
+    const uint32_t now = HAL_GetTick();
+    float progress = static_cast<float>(now - start) / static_cast<float>(duration_ms);
+    progress = CLAMP(progress, 0.0f, 1.0f);
+    m.target = start_vel + (end_vel - start_vel) * progress;
+    m.loopFOC();
+    m.move();
+    if ((now - start) >= duration_ms) {
+      break;
+    }
+  }
+  m.target = end_vel;
+}
+
+#if defined(MT6835_CALIB_OPENLOOP) && defined(SIMPLEFOC_STM32_DEBUG)
+void mt6835_autocal_sequence(void) {
+  if (!wait_for_yes_no("Start MT6835 User-AutoCalibration?", 5000U)) {
+    return;
+  }
+
+  bool retry_calib = true;
+  while (retry_calib) {
+    retry_calib = false;
+
+    MT6835Options4 opts4 = encoder2.getOptions4();
+    if (opts4.autocal_freq != MT6835_AUTOCAL_FREQ) {
+      opts4.autocal_freq = MT6835_AUTOCAL_FREQ;
+      encoder2.setOptions4(opts4);
+    }
+
+    float target_rpm = mt6835_target_rpm_from_freq(opts4.autocal_freq);
+    const float requested_velocity = (target_rpm * _2PI) / 60.0f;
+    float effective_velocity = requested_velocity;
+    const float vel_tol = (MT6835_CALIB_SPEED_TOL_RPM * _2PI) / 60.0f;
+    const float min_rotations = mt6835_min_rotations_from_freq(opts4.autocal_freq);
+    uint32_t min_calib_ms = static_cast<uint32_t>((min_rotations / target_rpm) * 60.0f * 1000.0f);
+
+    const MotionControlType prev_controller = motor.controller;
+    const TorqueControlType prev_torque_controller = motor.torque_controller;
+    const float prev_voltage_limit = motor.voltage_limit;
+    const float prev_target = motor.target;
+
+    motor.controller = MotionControlType::velocity_openloop;
+    motor.torque_controller = TorqueControlType::voltage;
+    motor.voltage_limit = alignStrength;
+    motor.target = 0.0f;
+
+    const float stall_floor_rad_s = 0.5f;
+    const uint32_t plateau_timeout_ms = 400U;
+    bool aborted = false;
+    bool plateau_detected = false;
+    float best_velocity = -1000.0f;
+    uint32_t last_improve_tick = HAL_GetTick();
+    const uint32_t ramp_start = last_improve_tick;
+
+    while ((HAL_GetTick() - ramp_start) < MT6835_CALIB_RAMP_MS) {
+      const uint32_t now = HAL_GetTick();
+      const float progress = (float)(now - ramp_start) / (float)MT6835_CALIB_RAMP_MS;
+      motor.target = effective_velocity * CLAMP(progress, 0.0f, 1.0f);
+      motor.loopFOC();
+      motor.move();
+      const float shaft = motor.shaftVelocity();
+
+      if ((now - ramp_start) > 200U && fabsf(shaft) < stall_floor_rad_s) {
+        Serial.println("MT6835 calibration aborted: motor stalled during ramp. Lower calibration RPM.");
+        aborted = true;
+        break;
+      }
+
+      if (shaft > best_velocity + (vel_tol * 0.5f)) {
+        best_velocity = shaft;
+        last_improve_tick = now;
+      }
+
+      if ((now - last_improve_tick) > plateau_timeout_ms && (motor.target - shaft) > vel_tol) {
+        plateau_detected = true;
+        effective_velocity = CLAMP(0.8f * shaft, stall_floor_rad_s, requested_velocity);
+        const float new_rpm = effective_velocity * 60.0f / _2PI;
+        uint8_t new_freq = mt6835_autocal_freq_from_rpm(new_rpm);
+        if (new_freq != opts4.autocal_freq) {
+          opts4.autocal_freq = new_freq;
+          encoder2.setOptions4(opts4);
+          target_rpm = mt6835_target_rpm_from_freq(opts4.autocal_freq);
+          min_calib_ms = static_cast<uint32_t>((min_rotations / target_rpm) * 60.0f * 1000.0f);
+        }
+        Serial.printf("Velocity plateau at %.2f rad/s (%.1f RPM), reducing target to %.2f rad/s and setting AUTOCAL_FREQ=%u\n", shaft, new_rpm, effective_velocity, opts4.autocal_freq);
+        break;
+      }
+    }
+
+    if (aborted) {
+      digitalWrite(CALIBRATION_GPIO, LOW);
+      ramp_velocity(motor, motor.target, 0.0f, 1000U);
+      motor.controller = prev_controller;
+      motor.torque_controller = prev_torque_controller;
+      motor.voltage_limit = prev_voltage_limit;
+      motor.target = prev_target;
+      if (wait_for_yes_no("Retry MT6835 calibration?", 5000U)) {
+        retry_calib = true;
+      }
+      continue;
+    }
+
+    if (plateau_detected && motor.target > effective_velocity) {
+      ramp_velocity(motor, motor.target, effective_velocity, 700U);
+    }
+
+    bool speed_ready = false;
+    const uint32_t speed_wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - speed_wait_start) < 3000U) {
+      motor.loopFOC();
+      motor.move();
+      const float shaft = motor.shaftVelocity();
+      if (fabsf(shaft - effective_velocity) <= vel_tol) {
+        speed_ready = true;
+        break;
+      }
+      if (fabsf(shaft) < stall_floor_rad_s) {
+        Serial.println("MT6835 calibration aborted: motor stalled while holding speed.");
+        aborted = true;
+        break;
+      }
+    }
+
+    if (!speed_ready || aborted) {
+      digitalWrite(CALIBRATION_GPIO, LOW);
+      ramp_velocity(motor, motor.target, 0.0f, 1000U);
+      motor.controller = prev_controller;
+      motor.torque_controller = prev_torque_controller;
+      motor.voltage_limit = prev_voltage_limit;
+      motor.target = prev_target;
+      if (!aborted) {
+        Serial.println("MT6835 calibration skipped: speed not reached.");
+      }
+      if (wait_for_yes_no("Retry MT6835 calibration?", 5000U)) {
+        retry_calib = true;
+      }
+      continue;
+    }
+
+    digitalWrite(CALIBRATION_GPIO, HIGH);
+    delay(100);
+    uint8_t state = mt6835_cal_state();
+    if (state != 0x01u) {
+      Serial.printf("MT6835 autocal not running (state=%u)\n", state);
+      digitalWrite(CALIBRATION_GPIO, LOW);
+      ramp_velocity(motor, motor.target, 0.0f, 1000U);
+      motor.controller = prev_controller;
+      motor.torque_controller = prev_torque_controller;
+      motor.voltage_limit = prev_voltage_limit;
+      motor.target = prev_target;
+      continue;
+    }
+
+    const uint32_t calib_start = HAL_GetTick();
+    bool calibration_done = false;
+    bool calibration_success = false;
+    bool status_warned = false;
+
+    while (!calibration_done) {
+      motor.loopFOC();
+      motor.move();
+      state = mt6835_cal_state();
+      const uint32_t elapsed = HAL_GetTick() - calib_start;
+      const bool status_valid = (state <= 0x03u);
+
+      if (!status_valid) {
+        if (!status_warned) {
+          Serial.println("MT6835 calibration status unavailable, falling back to time-based completion.");
+          status_warned = true;
+        }
+        if (elapsed >= min_calib_ms) {
+          calibration_success = true;
+          calibration_done = true;
+        }
+        continue;
+      }
+
+      if (state == 0x01u) {
+        if (fabsf(motor.shaftVelocity()) < stall_floor_rad_s) {
+          Serial.println("MT6835 calibration aborted: stall during calibration.");
+          aborted = true;
+          calibration_done = true;
+        }
+        continue;
+      }
+
+      if (state == 0x03u) {
+        calibration_success = true;
+        calibration_done = true;
+      } else if (state == 0x02u) {
+        calibration_done = true;
+      }
+    }
+
+    digitalWrite(CALIBRATION_GPIO, LOW);
+    ramp_velocity(motor, motor.target, 0.0f, 3000U);
+
+    if (calibration_success && !aborted) {
+      Serial.println("MT6835 calibration successful.");
+      for (int i = 10; i >= 1; i--) {
+        Serial.printf("Wait %d s\n", i);
+        delay(1000);
+      }
+      for (int i = 0; i < 5; i++) {
+        Serial.println("Power Off the system fully");
+        delay(1000);
+      }
+    } else {
+      Serial.println("MT6835 calibration failed");
+      if (wait_for_yes_no("Retry MT6835 calibration?", 5000U)) {
+        retry_calib = true;
+      }
+    }
+
+    motor.controller = prev_controller;
+    motor.torque_controller = prev_torque_controller;
+    motor.voltage_limit = prev_voltage_limit;
+    motor.target = prev_target;
+  }
+}
+#endif
+
+#if defined(USE_CALIBRATED_SENSOR) && defined(CALIBRATE_SENSOR_ON_STARTUP) && defined(SIMPLEFOC_STM32_DEBUG)
+void calibrated_sensor_lut_sequence(void) {
+  if (!wait_for_yes_no("Start calibrated sensor LUT calibration?", 5000U)) {
+    return;
+  }
+  calibrated_encoder.voltage_calibration = alignStrength;
+  calibrated_encoder.calibrate(motor);
+}
+#endif
+
 #if defined(VOLTAGE_SENSING)
 static ADC_HandleTypeDef hadc2 = {0};
 static DMA_HandleTypeDef hdma_adc2 = {0};

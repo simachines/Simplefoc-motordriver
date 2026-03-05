@@ -4,6 +4,7 @@
 #include "SimpleFOC.h"
 #include "encoders/stm32hwencoder/STM32HWEncoder.h"
 #include "encoders/mt6835/MagneticSensorMT6835.h"
+#include "encoders/calibrated/CalibratedSensor.h"
 #include "drivers/hardware_specific/stm32/stm32_mcu.h"
 
 //#define BTS_BREAK
@@ -17,6 +18,18 @@
 //#define ESTOP_REQUIRE_HOLD
 #define ESTOP_ENABLE
 //#define MOTOR_CHAR
+#define USE_CALIBRATED_SENSOR
+#define CALIBRATE_SENSOR_ON_STARTUP
+// Enable MT6835 absolute angle offset capture at startup
+#define MT6835_SET_SENSOR_OFFSET_FROM_SPI
+// Enable MT6835 user autocalibration run on startup
+#define MT6835_CALIB_OPENLOOP
+// Ramp time to reach calibration speed
+#define MT6835_CALIB_RAMP_MS 2000U
+// Acceptable speed error in RPM when checking ramp completion
+#define MT6835_CALIB_SPEED_TOL_RPM 5.0f
+// MT6835 autocalibration frequency (0-7) - drives target RPM and min rotations
+#define MT6835_AUTOCAL_FREQ 0U
 
 #if defined(PWM_INPUT)
 #include "utilities/stm32pwm/STM32PWMInput.h"
@@ -38,13 +51,14 @@
 #define BTS_OC_GPIO_PIN GPIO_PIN_12
 #define BTS_OC_AF GPIO_AF6_TIM1
 #define BTS_OC_ACTIVE_LOW false
-#define FAULT_LED_PIN PC6
+#define CALIBRATION_GPIO PC6
 #define A_VBUS PA0
 #define currentPHA PA2
 #define currentPHB _NC
 #define currentPHC PA1
 #define ENCODER_PIN_A PB6
 #define ENCODER_PIN_B PB7_ALT1
+#define ENCODER_PIN_I _NC
 #define MT6835_SPI_MOSI PB5_ALT1
 #define MT6835_SPI_MISO PC11
 #define MT6835_SPI_SCK  PC10
@@ -70,13 +84,14 @@ constexpr float ADC_REF_V = 3.30f;
 #define BTS_OC_GPIO_PIN GPIO_PIN_15
 #define BTS_OC_AF GPIO_AF1_TIM1
 #define BTS_OC_ACTIVE_LOW false
-#define FAULT_LED_PIN LED_BUILTIN
+#define CALIBRATION_GPIO LED_BUILTIN
 #define A_VBUS PA1
 #define currentPHA PA2
 #define currentPHB _NC
 #define currentPHC PA3
 #define ENCODER_PIN_A PC6
 #define ENCODER_PIN_B PB5
+#define ENCODER_PIN_I _NC
 #define MT6835_SPI_MOSI PB15
 #define MT6835_SPI_MISO PC2
 #define MT6835_SPI_SCK  PB13
@@ -166,12 +181,24 @@ extern BLDCMotor motor;
 extern BLDCDriver3PWM driver;
 extern LowsideCurrentSense currentsense;
 extern STM32HWEncoder encoder;
+#if defined(USE_CALIBRATED_SENSOR)
+extern CalibratedSensor calibrated_encoder;
+#endif
 extern SPIClass SPI_3;
 extern SPISettings mt6835_spi_settings;
 extern MagneticSensorMT6835 encoder2;
 #if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 extern Commander commander;
 #endif
+
+bool wait_for_yes_no(const char* prompt, uint32_t timeout_ms = 0);
+uint8_t mt6835_cal_state(void);
+void ramp_velocity(BLDCMotor& m, float start_vel, float end_vel, uint32_t duration_ms);
+void mt6835_autocal_sequence(void);
+void calibrated_sensor_lut_sequence(void);
+float mt6835_target_rpm_from_freq(uint8_t freq);
+uint8_t mt6835_autocal_freq_from_rpm(float rpm);
+float mt6835_min_rotations_from_freq(uint8_t freq);
 
 void setup();
 void loop();

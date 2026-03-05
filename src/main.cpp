@@ -23,7 +23,9 @@ float alignStrength = 3.0f;
 STM32PWMInput pwmInput = STM32PWMInput(PE5);
 #endif
 #endif
-float electrical_degrees = 0.0f;
+float measured_electrical_rads;
+float radians;
+float electrical_rads = 0.0f;
 float degrees = 0;
 float phase_inductance = L_q;
 float current_bandwidth = 100.0f;
@@ -59,7 +61,16 @@ LowsideCurrentSense currentsense = LowsideCurrentSense(0.035f, 50.0f, currentPHA
 #elif defined(STM32G4)
 LowsideCurrentSense currentsense = LowsideCurrentSense(66.0f, currentPHA, currentPHB, currentPHC);
 #endif
+
 STM32HWEncoder encoder = STM32HWEncoder(ENCODER_PPR, ENCODER_PIN_A, ENCODER_PIN_B, _NC);
+
+#if defined(USE_CALIBRATED_SENSOR)
+constexpr int ENCODER_CAL_LUT_SIZE = 50;
+float encoder_calibration_lut[ENCODER_CAL_LUT_SIZE] = {0.0f};
+float encoder_zero_electric_angle = NOT_SET;
+Direction encoder_sensor_direction = Direction::UNKNOWN;
+CalibratedSensor calibrated_encoder = CalibratedSensor(encoder, ENCODER_CAL_LUT_SIZE, encoder_calibration_lut);
+#endif
 SPIClass SPI_3(MT6835_SPI_MOSI, MT6835_SPI_MISO, MT6835_SPI_SCK);
 SPISettings mt6835_spi_settings(1000000, MT6835_BITORDER, SPI_MODE3);
 MagneticSensorMT6835 encoder2 = MagneticSensorMT6835(MT6835_SPI_CS, mt6835_spi_settings);
@@ -86,6 +97,11 @@ Serial.println("SPI_3.begin() complete...");
 
 	encoder2.init(&SPI_3);
 Serial.println("encoder2.init(&SPI_3) setup...");
+	#if defined(MT6835_SET_SENSOR_OFFSET_FROM_SPI)
+	encoder2.update();
+	motor.sensor_offset = encoder2.getMechanicalAngle();
+	Serial.printf("MT6835 sensor_offset set: %.4f rad\n", motor.sensor_offset);
+	#endif
 	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
 	commander.add('B', setBandwidth, "Set current control bandwidth (Hz)");
 	commander.add('E', onSetABZResolution, nullptr);
@@ -93,7 +109,8 @@ Serial.println("encoder2.init(&SPI_3) setup...");
 	commander.add('M', onMotor, "my motor motion");
 	#endif
 
-	pinMode(FAULT_LED_PIN, OUTPUT);
+	pinMode(CALIBRATION_GPIO, OUTPUT);
+	digitalWrite(CALIBRATION_GPIO, LOW);
 
     #if defined(ESTOP_ENABLE)
     estop_init();
@@ -142,7 +159,6 @@ Serial.println("Step 7 setup...");
 	encoder.init();
 	Serial.printf("Encoder init status: %d\n", encoder.initialized);
 Serial.println("Step 8 setup...");
-
 #if defined(BTS_BREAK)
 	configureBtsBreak();
 #elif defined(BTS_OC_MONITOR)
@@ -157,18 +173,14 @@ Serial.println("Step 8 setup...");
 #if defined(VOLTAGE_SENSING)
 	v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
 	while (vbus_adc2_ready && (v_bus < supply_voltage_V - 10.0f || v_bus > supply_voltage_V + 1.0f)) {
-		digitalWrite(FAULT_LED_PIN, HIGH);
 		Serial.printf("PSU UNDER/OVER VOLTAGE: %.2f V\n", v_bus);
-		delay(250);
-		digitalWrite(FAULT_LED_PIN, LOW);
-		delay(250);
+		delay(500);
 		v_bus = vbus_adc2_ready ? vbus_from_dma_counts() : 0.0f;
 	}
 #else
 	v_bus = (float)supply_voltage_V;
 #endif
 
-	digitalWrite(FAULT_LED_PIN, HIGH);
 	Serial.printf("PSU NOMINAL: %.2f V\n", v_bus);
 
 	motor.controller = MotionControlType::torque;
@@ -197,7 +209,17 @@ Serial.println("Step 8 setup...");
 	motor.monitor_variables = _MON_CURR_Q | _MON_TARGET | _MON_CURR_D;
 	motor.modulation_centered = 1;
 
+	#if defined(USE_CALIBRATED_SENSOR)
+	motor.linkSensor(&calibrated_encoder);
+	if (_isset(encoder_zero_electric_angle)) {
+		motor.zero_electric_angle = encoder_zero_electric_angle;
+	}
+	if ((encoder_sensor_direction == Direction::CW) || (encoder_sensor_direction == Direction::CCW)) {
+		motor.sensor_direction = encoder_sensor_direction;
+	}
+	#else
 	motor.linkSensor(&encoder);
+	#endif
 	motor.linkDriver(&driver);
 	motor.linkCurrentSense(&currentsense);
 	currentsense.linkDriver(&driver);
@@ -206,10 +228,17 @@ Serial.println("Step 8 setup...");
 	Serial.printf("Current sense init status: %d\n", cs_init);
 
 	int m_init = motor.init();
+	currentsense.skip_align = true;
 	Serial.printf("Motor init status: %d\n", m_init);
 
-	currentsense.skip_align = true;
-   
+	#if defined(MT6835_CALIB_OPENLOOP) && defined(SIMPLEFOC_STM32_DEBUG)
+	mt6835_autocal_sequence();
+	#endif
+
+	#if defined(USE_CALIBRATED_SENSOR) && defined(CALIBRATE_SENSOR_ON_STARTUP) && defined(SIMPLEFOC_STM32_DEBUG)
+	calibrated_sensor_lut_sequence();
+	#endif
+
 	#if defined(MOTOR_CHAR)
 	Serial.println("Hold The Wheel");
 	delay(3000);
@@ -234,8 +263,13 @@ void loop() {
     brake_control();
     #endif
   #endif
-  electrical_degrees = motor.electricalAngle();
-  degrees = encoder.getMechanicalAngle() * RAD_2_DEG;
+
+  
+  radians = encoder.getMechanicalAngle();
+  degrees = radians * RAD_2_DEG;
+  measured_electrical_rads  = motor.electricalAngle();
+  electrical_rads = motor.electrical_angle;
+
 #if defined(ESTOP_ENABLE)
 	estop_update();
 	if (estop_active()) {
@@ -270,5 +304,4 @@ void loop() {
 #else
 	motor.move();
 #endif
-
 }
