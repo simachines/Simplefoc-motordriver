@@ -40,6 +40,7 @@ bool brake_active = false;
 bool break_active = false;
 bool simplefoc_init = true;
 bool v_error = false;
+bool overvoltage_active = false;
 uint32_t current_time = 0;
 uint32_t t_pwm = 0;
 uint16_t MAX_REGEN_CURRENT = 0;
@@ -251,57 +252,61 @@ Serial.println("Step 8 setup...");
 }
 
 void loop() {
-   current_time = HAL_GetTick();
-   if ((current_time - t_pwm ) >= 1){
-    t_pwm  = current_time;
-       check_vbus();
+	current_time = HAL_GetTick();
+	if ((current_time - t_pwm) >= 1) {
+		t_pwm = current_time;
+		check_vbus();
 #if defined(BRAKE_CONTROL_ENABLED)
-    #if defined(BRAKE_PWM_TEST_MODE)
-    const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
-    __HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
-    #else
-    brake_control();
-    #endif
-  #endif
+		#if defined(BRAKE_PWM_TEST_MODE)
+		const uint32_t testDuty = (static_cast<uint32_t>(pwmPeriodCounts) * BRAKE_PWM_TEST_DUTY_PERCENT) / 100u;
+		__HAL_TIM_SET_COMPARE(&htim_brake, BRAKE_PWM_CHANNEL, testDuty);
+		#else
+		brake_control();
+		#endif
+	#endif
 
-  
-  radians = encoder.getMechanicalAngle();
-  degrees = radians * RAD_2_DEG;
-  measured_electrical_rads  = motor.electricalAngle();
-  electrical_rads = motor.electrical_angle;
+		radians = encoder.getMechanicalAngle();
+		degrees = radians * RAD_2_DEG;
+		measured_electrical_rads = motor.electricalAngle();
+		electrical_rads = motor.electrical_angle;
 
 #if defined(ESTOP_ENABLE)
-	estop_update();
-	if (estop_active()) {
-		if (!estop_motor_disabled) {
-			motor.target = 0;
-			motor.disable();
-			estop_motor_disabled = true;
+		estop_update();
+		if (estop_active()) {
+			if (!estop_motor_disabled) {
+				motor.target = 0;
+				motor.disable();
+				estop_motor_disabled = true;
+			}
+		} else {
+			if (estop_motor_disabled) {
+				motor.enable();
+				estop_motor_disabled = false;
+			}
 		}
-	}else {
-	if (estop_motor_disabled) {
-		motor.enable();
-		estop_motor_disabled = false;
-	}
-    }
 #endif
-	#if defined(BTS_OC_MONITOR)
-	bts_oc_input_update();
-	#endif
-	#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
-	commander.run();
-	#endif
-}
-	motor.loopFOC();
-#if defined(PWM_INPUT)
-    calc_hw_pwm();
-	if (pwm_input_control_enabled) {
-		target = -target_current_to_amps(target_current);
-		motor.move(target);
+#if defined(BTS_OC_MONITOR)
+		bts_oc_input_update();
+#endif
+#if defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF)
+		commander.run();
+#endif
+	}
+
+	if (overvoltage_active) {
+		driver.setPwm(0.0f, 0.0f, 0.0f);
 	} else {
-		motor.move();
-	}
+		motor.loopFOC();
+#if defined(PWM_INPUT)
+		calc_hw_pwm();
+		if (pwm_input_control_enabled) {
+			target = -target_current_to_amps(target_current);
+			motor.move(target);
+		} else {
+			motor.move();
+		}
 #else
-	motor.move();
+		motor.move();
 #endif
+	}
 }

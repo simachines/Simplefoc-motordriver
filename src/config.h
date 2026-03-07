@@ -168,6 +168,7 @@ extern bool brake_active;
 extern bool break_active;
 extern bool simplefoc_init;
 extern bool v_error;
+extern bool overvoltage_active;
 extern uint32_t current_time;
 extern uint32_t t_pwm;
 extern uint16_t MAX_REGEN_CURRENT;
